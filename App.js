@@ -1,24 +1,27 @@
 import React from "react";
+
 import {
   View,
   Text,
   TextInput,
-  Button,
-  ActivityIndicator,
-  Image,
-  FlatList,
   TouchableOpacity,
   Alert,
+  FlatList,
+  ActivityIndicator,
+  Image,
 } from "react-native";
 
-import * as ImagePicker from "expo-image-picker";
-import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { saveToken, getToken } from "./auth";
 import { jwtDecode } from "jwt-decode";
+
+import { useFocusEffect } from "@react-navigation/native";
+
+import { saveToken, getToken } from "./auth";
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -440,47 +443,63 @@ function SellScreen({ navigation }) {
     </View>
   );
 }
-function InboxScreen() {
+function InboxScreen({ navigation, route }) {
+
   const [conversations, setConversations] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
 
-  React.useEffect(() => {
-    const loadInbox = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
+  const fetchInbox = async () => {
+    try {
+      setLoading(true);
 
-        console.log("INBOX TOKEN:", token);
+      const token = await AsyncStorage.getItem("token");
 
-        if (!token) {
-          console.log("NO TOKEN FOUND");
-          return;
-        }
+      console.log("INBOX TOKEN:", token);
 
-        const decoded = jwtDecode(token);
-        const userId = decoded.sub;
-
-        console.log("USER ID:", userId);
-
-        const res = await fetch(
-          `http://192.168.1.195:8000/conversations/${userId}`
-        );
-
-        const data = await res.json();
-
-        console.log("CONVERSATIONS:", data);
-
-        setConversations(data);
-
-      } catch (err) {
-        console.log("INBOX ERROR:", err);
+      if (!token) {
+        console.log("NO TOKEN FOUND");
+        return;
       }
-    };
 
-    loadInbox();
-  }, []);
+      const decoded = jwtDecode(token);
+      const userId = decoded.sub;
+
+      console.log("USER ID:", userId);
+
+      const res = await fetch(
+        `http://192.168.1.195:8000/conversations/${userId}`
+      );
+
+      const data = await res.json();
+
+      console.log("CONVERSATIONS:", data);
+
+      setConversations(data);
+
+    } catch (err) {
+      console.log("INBOX ERROR:", err);
+
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchInbox();
+    setRefreshing(false);
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchInbox();
+    }, [])
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
-      
+
       <View style={{ paddingTop: 50, paddingHorizontal: 15 }}>
         <Text style={{ fontSize: 28, fontWeight: "bold" }}>
           Inbox
@@ -488,16 +507,25 @@ function InboxScreen() {
       </View>
 
       {conversations.length === 0 ? (
-        <View style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center"
-        }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 30,
+          }}
+        >
           <Text style={{ fontSize: 16, fontWeight: "600" }}>
             No messages yet
           </Text>
 
-          <Text style={{ marginTop: 6, color: "#888", textAlign: "center" }}>
+          <Text
+            style={{
+              marginTop: 6,
+              color: "#888",
+              textAlign: "center",
+            }}
+          >
             When you message a seller or buyer, your chats will appear here.
           </Text>
         </View>
@@ -506,17 +534,26 @@ function InboxScreen() {
           data={conversations}
           keyExtractor={(item) => item._id?.toString()}
           contentContainerStyle={{ padding: 15 }}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
           renderItem={({ item }) => (
-            <View style={{
-              backgroundColor: "#fff",
-              padding: 15,
-              borderRadius: 12,
-              marginBottom: 10
-            }}>
-              <Text style={{ fontWeight: "bold" }}>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate("Chat", {
+                  conversationId: item._id,
+                })
+              }
+              style={{
+                backgroundColor: "#fff",
+                padding: 15,
+                borderRadius: 12,
+                marginBottom: 10,
+              }}
+            >
+              <Text style={{ fontWeight: "bold", fontSize: 16 }}>
                 {item.last_message || "Chat"}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}
@@ -636,47 +673,83 @@ function ChatScreen({ route }) {
   );
 }
 function ProfileScreen({ navigation }) {
+  const handleLogout = async () => {
+  try {
+    await AsyncStorage.removeItem("token");
+
+    navigation.replace("Login");
+
+  } catch (error) {
+    console.log("LOGOUT ERROR:", error);
+  }
+};
   return (
-    <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
+  <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
 
-      <View style={{
-        paddingTop: 50,
-        paddingHorizontal: 15,
-        backgroundColor: "#fff",
-        paddingBottom: 15,
-        borderBottomWidth: 0.5,
-        borderBottomColor: "#eee",
-      }}>
-        <Text style={{ fontSize: 24, fontWeight: "bold" }}>
-          Account
-        </Text>
-      </View>
-
-      <View style={{ marginTop: 10 }}>
-
-        <MenuItem
-          title="Saved Items"
-          onPress={() => navigation.navigate("SavedItems")}
-        />
-
-        <MenuItem
-          title="Transactions"
-          onPress={() => navigation.navigate("Transactions")}
-        />
-
-        <MenuItem
-          title="Account Settings"
-          onPress={() => navigation.navigate("AccountSettings")}
-        />
-
-        <MenuItem
-          title="Help Center"
-          onPress={() => navigation.navigate("HelpCenter")}
-        />
-
-      </View>
+    {/* HEADER */}
+    <View style={{
+      paddingTop: 50,
+      paddingHorizontal: 15,
+      backgroundColor: "#fff",
+      paddingBottom: 15,
+      borderBottomWidth: 0.5,
+      borderBottomColor: "#eee",
+    }}>
+      <Text style={{ fontSize: 24, fontWeight: "bold" }}>
+        Account
+      </Text>
     </View>
-  );
+
+    {/* MENU SECTION */}
+    <View style={{ marginTop: 10, paddingHorizontal: 15 }}>
+
+      <MenuItem
+        title="Saved Items"
+        onPress={() => navigation.navigate("SavedItems")}
+      />
+
+      <MenuItem
+        title="Transactions"
+        onPress={() => navigation.navigate("Transactions")}
+      />
+
+      <MenuItem
+        title="Account Settings"
+        onPress={() => navigation.navigate("AccountSettings")}
+      />
+
+      <MenuItem
+        title="Help Center"
+        onPress={() => navigation.navigate("HelpCenter")}
+      />
+
+      {/* LOGOUT BUTTON */}
+      <TouchableOpacity
+        onPress={handleLogout}
+        style={{
+          marginTop: 30,
+          backgroundColor: "#111",
+          paddingVertical: 14,
+          borderRadius: 12,
+          alignItems: "center",
+          marginHorizontal: 15,
+        }}
+      >
+        <Text
+          style={{
+            color: "#fff",
+            fontWeight: "bold",
+            fontSize: 16,
+          }}
+        >
+          Logout
+        </Text>
+      </TouchableOpacity>
+
+    </View>
+
+   </View>
+ );
 }
 
 /* ================= MENU ITEM ================= */
@@ -730,7 +803,7 @@ function AccountSettingsScreen({ navigation }) {
 function NotificationsScreen() {
   return (
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Ionicons name="notifications-outline" size={70} color="#999" />
+      <Ionicons name="notifications-outline" size={24} color="black" />
       <Text style={{ marginTop: 10 }}>No notifications yet</Text>
     </View>
   );
