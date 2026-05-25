@@ -16,7 +16,9 @@ import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { saveToken, getToken } from "./auth";
+import { jwtDecode } from "jwt-decode";
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -25,46 +27,54 @@ function LoginScreen({ navigation }) {
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
-  const login = async () => {
-    try {
-      setLoading(true);
+const login = async () => {
+  try {
+    setLoading(true);
 
-      console.log("LOGIN START");
+    console.log("LOGIN START");
 
-      const res = await fetch("http://192.168.1.195:8000/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          phone,
-          password,
-        }),
-      });
+    const res = await fetch("http://192.168.1.195:8000/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        phone,
+        password,
+      }),
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      console.log("RESPONSE:", res.status);
-      console.log("DATA:", data);
+    console.log("RESPONSE:", res.status);
+    console.log("DATA:", data);
 
+    if (!res.ok) {
+      Alert.alert("Login failed", data.detail || "Invalid credentials");
       setLoading(false);
-
-      if (!res.ok) {
-        Alert.alert("Login failed", data.detail || "Invalid credentials");
-        return;
-      }
-
-    navigation.navigate("MainApp", {
-  token: data.access_token
-});
-
-    } catch (err) {
-      setLoading(false);
-      console.log("LOGIN ERROR:", err);
-      Alert.alert("Error", err.message);
+      return;
     }
-  };
 
+    // ✅ USE YOUR NEW AUTH SYSTEM
+    await saveToken(data.access_token);
+
+    console.log("TOKEN SAVED:", data.access_token);
+
+    // 🔍 DEBUG CHECK
+    const test = await getToken();
+    console.log("TOKEN FROM STORAGE:", test);
+
+    setLoading(false);
+
+    // ✅ IMPORTANT: go directly to MainApp (NO Loading screen anymore)
+    navigation.replace("MainApp");
+
+  } catch (err) {
+    console.log("LOGIN ERROR:", err);
+    setLoading(false);
+    Alert.alert("Error", "Network error");
+  }
+};
   return (
     <View
       style={{
@@ -132,15 +142,27 @@ function LoginScreen({ navigation }) {
   );
 }
 /* ================= LOADING ================= */
-function LoadingScreen({ navigation, route }) {
+function LoadingScreen({ navigation }) {
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      navigation.replace("MainApp", {
-        token: route?.params?.token,
-      });
-    }, 1000);
+    const loadApp = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
 
-    return () => clearTimeout(timer);
+        console.log("LOADING SCREEN TOKEN:", token);
+
+        if (!token) {
+          navigation.replace("Login");
+          return;
+        }
+
+        navigation.replace("MainApp");
+      } catch (err) {
+        console.log("LOADING ERROR:", err);
+        navigation.replace("Login");
+      }
+    };
+
+    loadApp();
   }, []);
 
   return (
@@ -150,21 +172,30 @@ function LoadingScreen({ navigation, route }) {
     </View>
   );
 }
-function HomeScreen({ navigation, token }) {
+function HomeScreen({ navigation }) {
   const [listings, setListings] = React.useState([]);
-  const [search, setSearch] = React.useState(""); // ✅ FIX ADDED
+  const [search, setSearch] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
 
+  const fetchListings = async () => {
+    try {
+      setLoading(true);
+
+      const res = await fetch("http://192.168.1.195:8000/listings");
+      const data = await res.json();
+
+      setListings(data);
+    } catch (err) {
+      console.log("ERROR:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ LOAD ON SCREEN OPEN
   React.useEffect(() => {
-    if (!token) return;
-
-    fetch("http://192.168.1.195:8000/listings")
-      .then(res => res.json())
-      .then(data => {
-        console.log("LISTINGS:", data);
-        setListings(data || []);
-      })
-      .catch(err => console.log("ERROR:", err));
-  }, [token]);
+    fetchListings();
+  }, []);
 
   const filtered = listings.filter(item =>
     item?.title?.toLowerCase().includes(search.toLowerCase())
@@ -173,6 +204,7 @@ function HomeScreen({ navigation, token }) {
   return (
     <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
 
+      {/* HEADER */}
       <View style={{ paddingTop: 50, paddingHorizontal: 15 }}>
         <Text style={{ fontSize: 28, fontWeight: "bold" }}>
           Marketplace
@@ -191,10 +223,13 @@ function HomeScreen({ navigation, token }) {
         />
       </View>
 
+      {/* LIST */}
       <FlatList
         data={filtered}
-        keyExtractor={(item, index) => index.toString()}
+        keyExtractor={(item) => item._id}
         contentContainerStyle={{ padding: 15 }}
+        refreshing={loading}
+        onRefresh={fetchListings}
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() =>
@@ -232,8 +267,8 @@ function HomeScreen({ navigation, token }) {
   );
 }
 /* ================= SELL SCREEN ================= */
-function SellScreen({ navigation, route }) {
-  const token = route?.params?.token;
+function SellScreen({ navigation }) {
+  const [token, setToken] = React.useState(null);
 
   const [title, setTitle] = React.useState("");
   const [price, setPrice] = React.useState("");
@@ -241,6 +276,18 @@ function SellScreen({ navigation, route }) {
   const [image, setImage] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
 
+  // ✅ LOAD TOKEN
+  React.useEffect(() => {
+    const loadToken = async () => {
+      const stored = await AsyncStorage.getItem("token");
+      console.log("SELL SCREEN TOKEN:", stored);
+      setToken(stored);
+    };
+
+    loadToken();
+  }, []);
+
+  // ✅ PICK IMAGE FUNCTION (THIS WAS MISSING HEADER IN YOUR CODE)
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -253,8 +300,15 @@ function SellScreen({ navigation, route }) {
     }
   };
 
+  // ✅ CREATE LISTING
   const createListing = async () => {
     try {
+      console.log("TOKEN BEING SENT:", token);
+
+      if (!token) {
+  Alert.alert("No token found. Please login again.");
+  return;
+}
       setLoading(true);
 
       const res = await fetch("http://192.168.1.195:8000/listings", {
@@ -273,9 +327,10 @@ function SellScreen({ navigation, route }) {
 
       const data = await res.json();
 
+      console.log("LISTING RESPONSE:", data);
+
       if (!res.ok) {
-        Alert.alert("Error", data.detail || "Failed to post");
-        setLoading(false);
+        Alert.alert("Error", data.detail || "Failed to post listing");
         return;
       }
 
@@ -286,7 +341,10 @@ function SellScreen({ navigation, route }) {
       setDescription("");
       setImage(null);
 
+     navigation.navigate("Home", { refresh: true });
+
     } catch (err) {
+      console.log("POST ERROR:", err);
       Alert.alert("Error", "Network error");
     } finally {
       setLoading(false);
@@ -295,7 +353,6 @@ function SellScreen({ navigation, route }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f2f3f5", padding: 20 }}>
-
       <Text style={{ fontSize: 22, fontWeight: "bold", marginBottom: 10 }}>
         Sell Item
       </Text>
@@ -360,7 +417,11 @@ function SellScreen({ navigation, route }) {
       {image && (
         <Image
           source={{ uri: image }}
-          style={{ height: 180, borderRadius: 10, marginBottom: 10 }}
+          style={{
+            height: 180,
+            borderRadius: 10,
+            marginBottom: 10,
+          }}
         />
       )}
 
@@ -376,7 +437,6 @@ function SellScreen({ navigation, route }) {
           {loading ? "Posting..." : "Post Listing"}
         </Text>
       </TouchableOpacity>
-
     </View>
   );
 }
@@ -384,10 +444,38 @@ function InboxScreen() {
   const [conversations, setConversations] = React.useState([]);
 
   React.useEffect(() => {
-    fetch("http://192.168.1.195:8000/conversations")
-      .then(res => res.json())
-      .then(data => setConversations(data || []))
-      .catch(console.log);
+    const loadInbox = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+
+        console.log("INBOX TOKEN:", token);
+
+        if (!token) {
+          console.log("NO TOKEN FOUND");
+          return;
+        }
+
+        const decoded = jwtDecode(token);
+        const userId = decoded.sub;
+
+        console.log("USER ID:", userId);
+
+        const res = await fetch(
+          `http://192.168.1.195:8000/conversations/${userId}`
+        );
+
+        const data = await res.json();
+
+        console.log("CONVERSATIONS:", data);
+
+        setConversations(data);
+
+      } catch (err) {
+        console.log("INBOX ERROR:", err);
+      }
+    };
+
+    loadInbox();
   }, []);
 
   return (
@@ -416,7 +504,7 @@ function InboxScreen() {
       ) : (
         <FlatList
           data={conversations}
-          keyExtractor={(item) => item._id}
+          keyExtractor={(item) => item._id?.toString()}
           contentContainerStyle={{ padding: 15 }}
           renderItem={({ item }) => (
             <View style={{
@@ -441,36 +529,54 @@ function ChatScreen({ route }) {
 
   const [messages, setMessages] = React.useState([]);
   const [text, setText] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
 
-  const loadMessages = () => {
-    fetch(`http://192.168.1.195:8000/${conversationId}`)
-      .then(res => res.json())
-      .then(data => setMessages(Array.isArray(data) ? data : []))
-      .catch(console.log);
+  // 🔄 LOAD MESSAGES
+  const loadMessages = async () => {
+    try {
+      const res = await fetch(
+        `http://192.168.1.195:8000/messages/${conversationId}`
+      );
+
+      const data = await res.json();
+      setMessages(data);
+    } catch (err) {
+      console.log("LOAD MESSAGES ERROR:", err);
+    }
   };
 
   React.useEffect(() => {
     loadMessages();
   }, []);
 
-  const sendMessage = async (msg) => {
-    const finalText = msg || text;
-    if (!finalText) return;
+  // 📤 SEND MESSAGE
+  const sendMessage = async () => {
+    try {
+      if (!text.trim()) return;
 
-   await fetch("http://192.168.1.195:8000/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        conversation_id: conversationId,
-        sender_id: "me",
-        text: finalText,
-      }),
-    });
+      setLoading(true);
 
-    setText("");
-    loadMessages();
+      const token = await AsyncStorage.getItem("token");
+
+      await fetch("http://192.168.1.195:8000/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          text: text,
+        }),
+      });
+
+      setText("");
+      loadMessages(); // refresh chat
+    } catch (err) {
+      console.log("SEND ERROR:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -479,40 +585,51 @@ function ChatScreen({ route }) {
       {/* MESSAGES */}
       <FlatList
         data={messages}
-        keyExtractor={(item, index) => index.toString()}
-        contentContainerStyle={{ padding: 10 }}
+        keyExtractor={(item) => item._id}
+        contentContainerStyle={{ padding: 15 }}
         renderItem={({ item }) => (
-          <View
-            style={{
-              padding: 10,
-              marginVertical: 5,
-              backgroundColor: item.senderId === "me" ? "#DCF8C6" : "#fff",
-              alignSelf: item.senderId === "me" ? "flex-end" : "flex-start",
-              borderRadius: 10,
-              maxWidth: "80%",
-            }}
-          >
+          <View style={{
+            backgroundColor: "#fff",
+            padding: 10,
+            marginBottom: 8,
+            borderRadius: 10,
+            alignSelf: item.sender_id ? "flex-end" : "flex-start",
+            maxWidth: "80%",
+          }}>
             <Text>{item.text}</Text>
           </View>
         )}
       />
 
       {/* INPUT */}
-      <View style={{ flexDirection: "row", padding: 10 }}>
+      <View style={{
+        flexDirection: "row",
+        padding: 10,
+        backgroundColor: "#fff"
+      }}>
         <TextInput
           value={text}
           onChangeText={setText}
           placeholder="Message..."
           style={{
             flex: 1,
-            borderWidth: 1,
-            borderRadius: 8,
+            backgroundColor: "#f2f3f5",
             padding: 10,
-            backgroundColor: "#fff",
+            borderRadius: 10
           }}
         />
 
-        <Button title="Send" onPress={() => sendMessage()} />
+        <TouchableOpacity
+          onPress={sendMessage}
+          style={{
+            marginLeft: 10,
+            backgroundColor: "#000",
+            padding: 12,
+            borderRadius: 10
+          }}
+        >
+          <Text style={{ color: "#fff" }}>Send</Text>
+        </TouchableOpacity>
       </View>
 
     </View>
@@ -647,7 +764,43 @@ function HelpCenterScreen() {
 
 /* ================= LISTING DETAIL ================= */
 function ListingDetailScreen({ route, navigation }) {
-  const { item } = route.params;
+  const { item, token } = route.params;
+
+ const createConversation = async () => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+    const decoded = jwtDecode(token);
+    const userId = decoded.sub;
+
+    const response = await fetch(
+      "http://192.168.1.195:8000/conversations",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          buyer_id: userId, // ✅ FIXED (no hardcode)
+          seller_id: item.owner_id || item.owner,
+          listing_id: item._id,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    console.log("NEW CONVERSATION:", data);
+
+    navigation.navigate("Chat", {
+      conversationId: data.conversation_id,
+      token,
+    });
+
+  } catch (err) {
+    console.log("CONVERSATION ERROR:", err);
+  }
+};
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f2f3f5", padding: 20 }}>
@@ -673,22 +826,37 @@ function ListingDetailScreen({ route, navigation }) {
         {item.description}
       </Text>
 
+      <TouchableOpacity
+        onPress={createConversation}
+        style={{
+          backgroundColor: "#000",
+          padding: 15,
+          borderRadius: 10,
+          marginTop: 20,
+        }}
+      >
+        <Text style={{ color: "#fff", textAlign: "center", fontWeight: "bold" }}>
+          Message Seller
+        </Text>
+      </TouchableOpacity>
+
     </View>
   );
 }
-function MainApp({ route }) {
-  const token = route?.params?.token;
+function MainApp() {
+  React.useEffect(() => {
+    const checkToken = async () => {
+      const token = await AsyncStorage.getItem("token");
+      console.log("MAIN APP TOKEN:", token);
+    };
+
+    checkToken();
+  }, []);
 
   return (
     <Tab.Navigator screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Home">
-        {props => <HomeScreen {...props} token={token} />}
-      </Tab.Screen>
-
-      <Tab.Screen name="Sell">
-        {props => <SellScreen {...props} token={token} />}
-      </Tab.Screen>
-
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Sell" component={SellScreen} />
       <Tab.Screen name="Inbox" component={InboxScreen} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
