@@ -54,9 +54,15 @@ function LoginScreen({ navigation }) {
         return;
       }
 
-    navigation.navigate("MainApp", {
-  token: data.access_token
-});
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: "MainApp",
+            params: { token: data.access_token },
+          },
+        ],
+      });
 
     } catch (err) {
       setLoading(false);
@@ -150,20 +156,20 @@ function LoadingScreen({ navigation, route }) {
     </View>
   );
 }
-function HomeScreen({ navigation, token }) {
+function HomeScreen({ navigation, route }) {
+  const token = route?.params?.token;
   const [listings, setListings] = React.useState([]);
-  const [search, setSearch] = React.useState(""); // ✅ FIX ADDED
+  const [search, setSearch] = React.useState("");
 
   React.useEffect(() => {
-    if (!token) return;
-
-    fetch("http://192.168.1.195:8000/listings")
+    fetch("http://192.168.1.195:8000/listings", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
       .then(res => res.json())
-      .then(data => {
-        console.log("LISTINGS:", data);
-        setListings(data || []);
-      })
-      .catch(err => console.log("ERROR:", err));
+      .then(data => setListings(data.listings || []))
+      .catch(console.log);
   }, [token]);
 
   const filtered = listings.filter(item =>
@@ -231,6 +237,7 @@ function HomeScreen({ navigation, token }) {
     </View>
   );
 }
+
 /* ================= SELL SCREEN ================= */
 function SellScreen({ navigation, route }) {
   const token = route?.params?.token;
@@ -380,61 +387,55 @@ function SellScreen({ navigation, route }) {
     </View>
   );
 }
-function InboxScreen() {
+function InboxScreen({ navigation }) {
   const [conversations, setConversations] = React.useState([]);
-
-  React.useEffect(() => {
-    fetch("http://192.168.1.195:8000/conversations")
-      .then(res => res.json())
-      .then(data => setConversations(data || []))
-      .catch(console.log);
-  }, []);
-
+React.useEffect(() => {
+  fetch("http://192.168.1.195:8000/conversations")
+    .then(res => res.json())
+    .then(data => setConversations(Array.isArray(data) ? data : []))
+    .catch(console.log);
+}, []);
   return (
     <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
-      
+
       <View style={{ paddingTop: 50, paddingHorizontal: 15 }}>
         <Text style={{ fontSize: 28, fontWeight: "bold" }}>
           Inbox
         </Text>
       </View>
 
-      {conversations.length === 0 ? (
-        <View style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center"
-        }}>
-          <Text style={{ fontSize: 16, fontWeight: "600" }}>
-            No messages yet
-          </Text>
-
-          <Text style={{ marginTop: 6, color: "#888", textAlign: "center" }}>
-            When you message a seller or buyer, your chats will appear here.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={conversations}
-          keyExtractor={(item) => item._id}
-          contentContainerStyle={{ padding: 15 }}
-          renderItem={({ item }) => (
-            <View style={{
+      <FlatList
+        data={conversations}
+        keyExtractor={(item, index) => index.toString()}
+        contentContainerStyle={{ padding: 15 }}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate("Chat", {
+                conversationId: item.id,
+              })
+            }
+            style={{
               backgroundColor: "#fff",
               padding: 15,
+              marginBottom: 10,
               borderRadius: 12,
-              marginBottom: 10
-            }}>
-              <Text style={{ fontWeight: "bold" }}>
-                {item.last_message || "Chat"}
-              </Text>
-            </View>
-          )}
-        />
-      )}
+            }}
+          >
+            <Text style={{ fontWeight: "bold" }}>
+              {item.listingTitle || "Chat"}
+            </Text>
+
+            <Text style={{ color: "#666", marginTop: 5 }}>
+              {item.lastMessage || "No messages yet"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      />
     </View>
   );
 }
+
 /* ================= CHAT SCREEN ================= */
 function ChatScreen({ route }) {
   const { conversationId } = route.params;
