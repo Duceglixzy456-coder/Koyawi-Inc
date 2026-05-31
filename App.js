@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState, useCallback } from "react";
 
 import {
   View,
@@ -9,21 +9,52 @@ import {
   FlatList,
   ActivityIndicator,
   Image,
+  StyleSheet,
 } from "react-native";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
-
 import { useFocusEffect } from "@react-navigation/native";
 
 import { saveToken, getToken } from "./auth";
-
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+function ScreenHeader({ title, navigation }) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingTop: 50,
+        paddingHorizontal: 15,
+        paddingBottom: 15,
+        backgroundColor: "#fff",
+        borderBottomWidth: 0.5,
+        borderBottomColor: "#eee",
+      }}
+    >
+      <TouchableOpacity onPress={() => navigation.goBack()}>
+        <Text style={{ fontSize: 28 }}>←</Text>
+      </TouchableOpacity>
+
+      <Text
+        style={{
+          fontSize: 20,
+          fontWeight: "bold",
+          marginLeft: 15,
+        }}
+      >
+        {title}
+      </Text>
+    </View>
+  );
+}
 
 function LoginScreen({ navigation }) {
   const [phone, setPhone] = React.useState("");
@@ -354,7 +385,7 @@ function SellScreen({ navigation }) {
     }
   };
 
-  return (
+  return ( 
     <View style={{ flex: 1, backgroundColor: "#f2f3f5", padding: 20 }}>
       <Text style={{ fontSize: 22, fontWeight: "bold", marginBottom: 10 }}>
         Sell Item
@@ -443,11 +474,10 @@ function SellScreen({ navigation }) {
     </View>
   );
 }
-function InboxScreen({ navigation, route }) {
-
-  const [conversations, setConversations] = React.useState([]);
-  const [loading, setLoading] = React.useState(false);
-  const [refreshing, setRefreshing] = React.useState(false);
+function InboxScreen({ navigation }) {
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchInbox = async () => {
     try {
@@ -457,10 +487,7 @@ function InboxScreen({ navigation, route }) {
 
       console.log("INBOX TOKEN:", token);
 
-      if (!token) {
-        console.log("NO TOKEN FOUND");
-        return;
-      }
+      if (!token) return;
 
       const decoded = jwtDecode(token);
       const userId = decoded.sub;
@@ -476,10 +503,8 @@ function InboxScreen({ navigation, route }) {
       console.log("CONVERSATIONS:", data);
 
       setConversations(data);
-
     } catch (err) {
       console.log("INBOX ERROR:", err);
-
     } finally {
       setLoading(false);
     }
@@ -492,77 +517,205 @@ function InboxScreen({ navigation, route }) {
   };
 
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       fetchInbox();
     }, [])
   );
 
+const renderItem = ({ item }) => {
   return (
-    <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
-
-      <View style={{ paddingTop: 50, paddingHorizontal: 15 }}>
-        <Text style={{ fontSize: 28, fontWeight: "bold" }}>
-          Inbox
-        </Text>
-      </View>
-
-      {conversations.length === 0 ? (
-        <View
-          style={{
-            flex: 1,
-            justifyContent: "center",
-            alignItems: "center",
-            paddingHorizontal: 30,
+    <TouchableOpacity
+      onPress={() =>
+        navigation.navigate("Chat", {
+          conversationId: item._id,
+        })
+      }
+      style={styles.chatCard}
+    >
+      <View style={styles.row}>
+        
+        {/* LEFT: avatar */}
+        <Image
+          source={{
+            uri:
+              item.listingImage ||
+              item.userAvatar ||
+              "https://i.imgur.com/placeholder.png",
           }}
-        >
-          <Text style={{ fontSize: 16, fontWeight: "600" }}>
-            No messages yet
+          style={styles.avatar}
+        />
+
+        {/* MIDDLE */}
+        <View style={styles.middle}>
+          <Text
+            style={[
+              styles.name,
+              item.unread ? styles.unreadText : null,
+            ]}
+          >
+            {item.listingTitle || item.userName || "Chat"}
           </Text>
 
           <Text
-            style={{
-              marginTop: 6,
-              color: "#888",
-              textAlign: "center",
-            }}
+            numberOfLines={1}
+            style={[
+              styles.message,
+              item.unread ? styles.unreadMessage : null,
+            ]}
           >
-            When you message a seller or buyer, your chats will appear here.
+            {item.last_message
+              ? `${item.last_sender === item.userId ? "You" : "Seller"}: ${item.last_message}`
+              : "Start the conversation"}
           </Text>
         </View>
-      ) : (
-        <FlatList
-          data={conversations}
-          keyExtractor={(item) => item._id?.toString()}
-          contentContainerStyle={{ padding: 15 }}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("Chat", {
-                  conversationId: item._id,
+
+        {/* RIGHT */}
+        <View style={{ alignItems: "flex-end" }}>
+          <Text style={styles.time}>
+            {item.updatedAt
+              ? new Date(item.updatedAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
                 })
-              }
-              style={{
-                backgroundColor: "#fff",
-                padding: 15,
-                borderRadius: 12,
-                marginBottom: 10,
-              }}
-            >
-              <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-                {item.last_message || "Chat"}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
-      )}
+              : ""}
+          </Text>
+
+          {item.unread && <View style={styles.unreadDot} />}
+        </View>
+
+      </View>
+    </TouchableOpacity>
+  );
+};
+  return (
+  <View style={styles.container}>
+
+    <ScreenHeader title="Inbox" navigation={navigation} />
+
+    {loading && conversations.length === 0 ? (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color="#000" />
+      </View>
+    ) : conversations.length === 0 ? (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>No messages yet</Text>
+        <Text style={styles.emptyText}>
+          When you message a seller or buyer, your chats will appear here.
+        </Text>
+      </View>
+    ) : (
+      <FlatList
+        data={conversations}
+        keyExtractor={(item) => item._id?.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={{ padding: 15 }}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+      />
+    )}
     </View>
   );
 }
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f2f3f5",
+  },
+
+  chatCard: {
+    backgroundColor: "#fff",
+    padding: 15,
+    borderRadius: 14,
+    marginBottom: 10,
+
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+
+    elevation: 3,
+  },
+
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  avatar: {
+    width: 45,
+    height: 45,
+    borderRadius: 12,
+    backgroundColor: "#ddd",
+    marginRight: 12,
+  },
+
+  middle: {
+    flex: 1,
+  },
+
+  name: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 2,
+    color: "#000",
+  },
+
+  message: {
+    fontSize: 13,
+    color: "#777",
+    marginTop: 1,
+  },
+
+  time: {
+    fontSize: 11,
+    color: "#999",
+  },
+
+  unreadText: {
+    fontWeight: "800",
+    color: "#000",
+  },
+
+  unreadMessage: {
+    color: "#000",
+    fontWeight: "500",
+  },
+
+  unreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "red",
+    marginTop: 6,
+  },
+
+  empty: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 30,
+  },
+
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  emptyText: {
+    marginTop: 6,
+    color: "#888",
+    textAlign: "center",
+  },
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  }
+});
+
 /* ================= CHAT SCREEN ================= */
-function ChatScreen({ route }) {
-  const { conversationId } = route.params;
+function ChatScreen({ route, navigation }) {
+const conversationId = route?.params?.conversationId;
 
   const [messages, setMessages] = React.useState([]);
   const [text, setText] = React.useState("");
@@ -616,61 +769,84 @@ function ChatScreen({ route }) {
     }
   };
 
-  return (
-    <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
+ return (
+  <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
 
-      {/* MESSAGES */}
-      <FlatList
-        data={messages}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={{ padding: 15 }}
-        renderItem={({ item }) => (
-          <View style={{
+    {/* BACK BUTTON */}
+   <TouchableOpacity
+  onPress={() => navigation.goBack()}
+  style={{
+    paddingTop: 50,   // pushes it below status bar
+    paddingBottom: 10,
+    paddingHorizontal: 15,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+  }}
+>
+  <Text style={{ fontSize: 16, fontWeight: "600" }}>
+    ← Back
+  </Text>
+</TouchableOpacity>
+    {/* MESSAGES */}
+    <FlatList
+      data={messages}
+      keyExtractor={(item) => item._id}
+      contentContainerStyle={{
+        padding: 15,
+        paddingBottom: 30,
+      }}
+      renderItem={({ item }) => (
+        <View
+          style={{
             backgroundColor: "#fff",
             padding: 10,
             marginBottom: 8,
             borderRadius: 10,
             alignSelf: item.sender_id ? "flex-end" : "flex-start",
             maxWidth: "80%",
-          }}>
-            <Text>{item.text}</Text>
-          </View>
-        )}
-      />
-
-      {/* INPUT */}
-      <View style={{
-        flexDirection: "row",
-        padding: 10,
-        backgroundColor: "#fff"
-      }}>
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          placeholder="Message..."
-          style={{
-            flex: 1,
-            backgroundColor: "#f2f3f5",
-            padding: 10,
-            borderRadius: 10
-          }}
-        />
-
-        <TouchableOpacity
-          onPress={sendMessage}
-          style={{
-            marginLeft: 10,
-            backgroundColor: "#000",
-            padding: 12,
-            borderRadius: 10
           }}
         >
-          <Text style={{ color: "#fff" }}>Send</Text>
-        </TouchableOpacity>
-      </View>
+          <Text>{item.text}</Text>
+        </View>
+      )}
+    />
 
+    {/* INPUT */}
+    <View
+      style={{
+        flexDirection: "row",
+        padding: 10,
+        backgroundColor: "#fff",
+      }}
+    >
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        placeholder="Message..."
+        style={{
+          flex: 1,
+          backgroundColor: "#f2f3f5",
+          padding: 10,
+          borderRadius: 10,
+        }}
+      />
+
+      <TouchableOpacity
+        onPress={sendMessage}
+        style={{
+          marginLeft: 10,
+          backgroundColor: "#000",
+          padding: 12,
+          borderRadius: 10,
+        }}
+      >
+        <Text style={{ color: "#fff" }}>Send</Text>
+      </TouchableOpacity>
     </View>
-  );
+
+  </View>
+);
 }
 function ProfileScreen({ navigation }) {
   const handleLogout = async () => {
@@ -685,6 +861,14 @@ function ProfileScreen({ navigation }) {
 };
   return (
   <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
+    <TouchableOpacity
+  onPress={() => navigation.goBack()}
+  style={{ padding: 15, backgroundColor: "#fff" }}
+>
+  <Text style={{ fontSize: 16, fontWeight: "600" }}>
+    ← Back
+  </Text>
+</TouchableOpacity>
 
     {/* HEADER */}
     <View style={{
@@ -773,18 +957,30 @@ function MenuItem({ title, onPress }) {
 function AccountSettingsScreen({ navigation }) {
   return (
     <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
-      <View style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingTop: 50,
-        paddingHorizontal: 15,
-        paddingBottom: 15,
-        backgroundColor: "#fff",
-        borderBottomWidth: 0.5,
-        borderBottomColor: "#eee",
-      }}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={{ fontSize: 28 }}>←</Text>
+
+      {/* HEADER */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingTop: 50,
+          paddingHorizontal: 15,
+          paddingBottom: 15,
+          backgroundColor: "#fff",
+          borderBottomWidth: 0.5,
+          borderBottomColor: "#eee",
+        }}
+      >
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate("Profile"); // fallback
+            }
+          }}
+        >
+          <Text style={{ fontSize: 22 }}>←</Text>
         </TouchableOpacity>
 
         <Text style={{ fontSize: 18, fontWeight: "bold", marginLeft: 10 }}>
@@ -792,10 +988,12 @@ function AccountSettingsScreen({ navigation }) {
         </Text>
       </View>
 
+      {/* CONTENT */}
       <View style={{ padding: 20 }}>
         <Text>Email: user@example.com</Text>
         <Text style={{ marginTop: 10 }}>Phone: +224 XXX XXX</Text>
       </View>
+
     </View>
   );
 }
@@ -809,32 +1007,135 @@ function NotificationsScreen() {
   );
 }
 /* ================= SAVED ITEMS ================= */
-function SavedItemsScreen() {
+function SavedItemsScreen({ navigation }) {
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Text>No saved items ❤️</Text>
+    <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
+
+      {/* HEADER */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingTop: 50,
+          paddingHorizontal: 15,
+          paddingBottom: 15,
+          backgroundColor: "#fff",
+          borderBottomWidth: 0.5,
+          borderBottomColor: "#eee",
+        }}
+      >
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate("Home"); // fallback
+            }
+          }}
+        >
+          <Text style={{ fontSize: 22 }}>←</Text>
+        </TouchableOpacity>
+
+        <Text style={{ fontSize: 18, fontWeight: "bold", marginLeft: 10 }}>
+          Saved Items
+        </Text>
+      </View>
+
+      {/* CONTENT */}
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>No saved items ❤️</Text>
+      </View>
+
     </View>
   );
 }
-
 /* ================= TRANSACTIONS ================= */
-function TransactionsScreen() {
+function TransactionsScreen({ navigation }) {
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Text>No transactions yet</Text>
+    <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
+
+      {/* HEADER */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingTop: 50,
+          paddingHorizontal: 15,
+          paddingBottom: 15,
+          backgroundColor: "#fff",
+          borderBottomWidth: 0.5,
+          borderBottomColor: "#eee",
+        }}
+      >
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate("Home"); // fallback
+            }
+          }}
+        >
+          <Text style={{ fontSize: 22 }}>←</Text>
+        </TouchableOpacity>
+
+        <Text style={{ fontSize: 18, fontWeight: "bold", marginLeft: 10 }}>
+          Transactions
+        </Text>
+      </View>
+
+      {/* CONTENT */}
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>No transactions yet</Text>
+      </View>
+
     </View>
   );
 }
 
 /* ================= HELP CENTER ================= */
-function HelpCenterScreen() {
+function HelpCenterScreen({ navigation }) {
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Text>How can we help you?</Text>
+    <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
+
+      {/* HEADER */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingTop: 50,
+          paddingHorizontal: 15,
+          paddingBottom: 15,
+          backgroundColor: "#fff",
+          borderBottomWidth: 0.5,
+          borderBottomColor: "#eee",
+        }}
+      >
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate("Home"); // fallback
+            }
+          }}
+        >
+          <Text style={{ fontSize: 22 }}>←</Text>
+        </TouchableOpacity>
+
+        <Text style={{ fontSize: 18, fontWeight: "bold", marginLeft: 10 }}>
+          Help Center
+        </Text>
+      </View>
+
+      {/* CONTENT */}
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>How can we help you?</Text>
+      </View>
+
     </View>
   );
 }
-
 /* ================= LISTING DETAIL ================= */
 function ListingDetailScreen({ route, navigation }) {
   const { item, token } = route.params;
@@ -876,11 +1177,28 @@ function ListingDetailScreen({ route, navigation }) {
 };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f2f3f5", padding: 20 }}>
+  <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
 
+    {/* BACK HEADER */}
+    <View
+      style={{
+        paddingTop: 50,
+        paddingBottom: 12,
+        paddingHorizontal: 15,
+        backgroundColor: "#fff",
+        borderBottomWidth: 1,
+        borderBottomColor: "#ddd",
+      }}
+    >
       <TouchableOpacity onPress={() => navigation.goBack()}>
-        <Text style={{ fontSize: 28 }}>←</Text>
+        <Text style={{ fontSize: 18, fontWeight: "600" }}>
+          ← Back
+        </Text>
       </TouchableOpacity>
+    </View>
+
+    {/* CONTENT */}
+    <View style={{ padding: 20 }}>
 
       <Image
         source={{ uri: item.image }}
@@ -914,6 +1232,18 @@ function ListingDetailScreen({ route, navigation }) {
       </TouchableOpacity>
 
     </View>
+  </View>
+);
+}
+function Tabs() {
+  return (
+    <Tab.Navigator screenOptions={{ headerShown: false }}>
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Sell" component={SellScreen} />
+      <Tab.Screen name="Inbox" component={InboxScreen} />
+      <Tab.Screen name="Notifications" component={NotificationsScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
   );
 }
 function MainApp() {
@@ -927,37 +1257,38 @@ function MainApp() {
   }, []);
 
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Sell" component={SellScreen} />
-      <Tab.Screen name="Inbox" component={InboxScreen} />
-      <Tab.Screen name="Notifications" component={NotificationsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
-    </Tab.Navigator>
+   <Stack.Navigator
+  initialRouteName="Tabs"
+  screenOptions={{ headerShown: false }}
+>
+
+      {/* TABS */}
+      <Stack.Screen name="Tabs" component={Tabs} />
+
+      {/* IN-APP SCREENS */}
+      <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="ListingDetail" component={ListingDetailScreen} />
+      <Stack.Screen name="SavedItems" component={SavedItemsScreen} />
+      <Stack.Screen name="Transactions" component={TransactionsScreen} />
+      <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+      <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+
+    </Stack.Navigator>
   );
 }
 /* ================= ROOT APP ================= */
 export default function App() {
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        initialRouteName="Loading"
+        screenOptions={{ headerShown: false }}
+      >
 
-        {/* AUTH */}
-        <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Loading" component={LoadingScreen} />
+        <Stack.Screen name="Login" component={LoginScreen} />
 
-        {/* MAIN APP */}
         <Stack.Screen name="MainApp" component={MainApp} />
-
-        {/* DETAIL SCREENS */}
-        <Stack.Screen name="Chat" component={ChatScreen} />
-        <Stack.Screen name="ListingDetail" component={ListingDetailScreen} />
-
-        {/* PROFILE STACK SCREENS */}
-        <Stack.Screen name="SavedItems" component={SavedItemsScreen} />
-        <Stack.Screen name="Transactions" component={TransactionsScreen} />
-        <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
-        <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
 
       </Stack.Navigator>
     </NavigationContainer>
