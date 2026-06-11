@@ -1,0 +1,216 @@
+import React from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
+
+import { Colors } from "../theme/colors";
+
+function SellScreen({ navigation }) {
+  const [token, setToken] = React.useState(null);
+
+  const [title, setTitle] = React.useState("");
+  const [price, setPrice] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [image, setImage] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const loadToken = async () => {
+      const stored = await AsyncStorage.getItem("access_token");
+      setToken(stored);
+    };
+
+    loadToken();
+  }, []);
+
+  const pickImage = async () => {
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  } catch (err) {
+    console.log("IMAGE PICK ERROR:", err);
+  }
+};
+
+  const createListing = async () => {
+    try {
+      if (!token) return alert("Please login again");
+
+      if (!title || !price || !description || !image) {
+        alert("Please fill all fields and add an image.");
+        return;
+      }
+
+      const cleanPrice = Number(price.replace(/[$,]/g, ""));
+
+      if (isNaN(cleanPrice) || cleanPrice <= 0) {
+        alert("Enter a valid price.");
+        return;
+      }
+
+      setLoading(true);
+
+      const formData = new FormData();
+
+formData.append("title", title.trim());
+formData.append("price", cleanPrice);
+formData.append("description", description.trim());
+
+formData.append("file", {
+  uri: image,
+  name: "photo.jpg",
+  type: "image/jpeg",
+});
+
+const res = await fetch("http://192.168.1.195:8000/listings", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${token}`,
+  },
+  body: formData,
+});
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.log("UPLOAD ERROR:", data);
+        alert(data.detail || "Failed to post listing");
+        return;
+      }
+
+      // reset form
+      setTitle("");
+      setPrice("");
+      setDescription("");
+      setImage(null);
+
+      navigation.navigate("Home");
+    } catch (err) {
+      console.log("NETWORK ERROR:", err);
+      alert("Network error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputStyle = {
+    backgroundColor: Colors.card,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    color: Colors.text,
+    marginBottom: 10,
+  };
+
+  return (
+  <KeyboardAvoidingView
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    style={{ flex: 1, backgroundColor: Colors.background }}
+  >
+    <ScrollView
+      contentContainerStyle={{
+        padding: 20,
+        paddingTop: 100,
+        flexGrow: 1,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 28,
+          fontWeight: "700",
+          marginBottom: 18,
+          color: Colors.text,
+        }}
+      >
+        Sell your item
+      </Text>
+
+        <TouchableOpacity
+          onPress={pickImage}
+          style={{
+            height: 190,
+            borderRadius: 16,
+            backgroundColor: Colors.card,
+            justifyContent: "center",
+            alignItems: "center",
+            marginBottom: 15,
+            overflow: "hidden",
+          }}
+        >
+          {image ? (
+            <Image
+              source={{ uri: image }}
+              style={{ width: "100%", height: "100%" }}
+            />
+          ) : (
+            <Text style={{ color: Colors.text }}>Tap to add photo</Text>
+          )}
+        </TouchableOpacity>
+
+        <TextInput
+          placeholder="Title"
+          value={title}
+          onChangeText={setTitle}
+          style={inputStyle}
+          placeholderTextColor="#888"
+        />
+
+        <TextInput
+          placeholder="Price"
+          value={price}
+          onChangeText={setPrice}
+          style={inputStyle}
+          placeholderTextColor="#888"
+        />
+
+        <TextInput
+          placeholder="Description"
+          value={description}
+          onChangeText={setDescription}
+          style={[inputStyle, { height: 120 }]}
+          multiline
+          placeholderTextColor="#888"
+        />
+
+        <TouchableOpacity
+          onPress={createListing}
+          style={{
+            marginTop: 10,
+            backgroundColor: Colors.primary,
+            padding: 15,
+            borderRadius: 10,
+            alignItems: "center",
+          }}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={{ color: "#fff", fontWeight: "600" }}>
+              Post Listing
+            </Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+export default SellScreen;
