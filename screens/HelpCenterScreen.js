@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLanguage } from "../Context/LanguageContext";
+import { translations } from "../utils/translations";
 
 function FAQItem({ question, answer }) {
   const [open, setOpen] = useState(false);
@@ -41,6 +43,8 @@ function Section({ title, children }) {
 }
 
 export default function HelpCenterScreen({ navigation }) {
+  const { language } = useLanguage();
+const t = translations[language];
   return (
     <View style={{ flex: 1, backgroundColor: "#f4f5f7" }}>
 
@@ -71,7 +75,7 @@ export default function HelpCenterScreen({ navigation }) {
           textAlign: "center",
         }}
       >
-        Help Center
+       {t.title}
       </Text>
 
       <ScrollView
@@ -80,75 +84,75 @@ export default function HelpCenterScreen({ navigation }) {
       >
 
         <Text style={styles.subtitle}>
-          Find answers to common questions about KOYAWI
-        </Text>
+  {t.helpCenter.subtitle}
+</Text> 
 
         {/* FAQ */}
-        <Section title="Frequently Asked Questions">
+       <Section title={t.helpCenter.faqTitle}>
           <FAQItem
-            question="How do I reset my password?"
-            answer="Go to Settings > Security & Permissions > Reset Password. You will receive a verification email or SMS."
+            question={t.helpCenter.resetPassword}
+           answer={t.helpCenter.resetPasswordAnswer}
           />
 
           <FAQItem
-            question="How do I delete a listing?"
-            answer="Open your listing, tap the options menu, and select Delete."
+           question={t.helpCenter.deleteListing}
+            answer={t.helpCenter.deleteListingAnswer}
           />
 
           <FAQItem
-            question="Why is my account restricted?"
-            answer="Restrictions may happen due to policy violations or user reports."
+            question={t.helpCenter.accountRestricted}
+            answer={t.helpCenter.accountRestrictedAnswer}
           />
         </Section>
 
         {/* ACCOUNT */}
-        <Section title="Account & Login">
+        <Section title={t.helpCenter.accountLoginTitle}>
           <FAQItem
-            question="I can’t log into my account"
-            answer="Check credentials or use password reset."
+            question={t.helpCenter.cannotLogin}
+           answer={t.helpCenter.cannotLoginAnswer}
           />
 
           <FAQItem
-            question="How do I change my email or phone?"
-            answer="Go to Profile > Security & Permissions."
+            question={t.helpCenter.changeEmail}
+           answer={t.helpCenter.changeEmailAnswer}
           />
         </Section>
 
         {/* LISTINGS */}
-        <Section title="Listings & Marketplace">
+        <Section title={t.helpCenter.marketplaceTitle}>
           <FAQItem
             question="Why was my listing removed?"
-            answer="It may violate marketplace rules or be reported."
+            answer={t.helpCenter.listingRemovedAnswer}
           />
 
           <FAQItem
-            question="How do I boost my listing?"
-            answer="Boosting is coming soon as a premium feature."
+            question={t.helpCenter.boostListing}
+            answer={t.helpCenter.boostListingAnswer}
           />
         </Section>
 
         {/* SAFETY */}
-        <Section title="Safety & Reporting">
+       <Section title={t.helpCenter.safetyTitle}>
           <FAQItem
-            question="How do I report a user?"
-            answer="Open profile/chat and tap Report."
+           question={t.helpCenter.reportUser}
+            answer={t.helpCenter.reportUserAnswer}
           />
 
           <FAQItem
-            question="What happens after I report someone?"
-            answer="Reports are reviewed and action may be taken within 24–48h."
+            question={t.helpCenter.reportAfter}
+            answer={t.helpCenter.reportAfterAnswer}
           />
         </Section>
 
         {/* CONTACT */}
-        <Section title="Contact Support">
+       <Section title={t.helpCenter.contactTitle}>
           <View style={styles.contactBox}>
             <Text style={styles.contactText}>
-              Need more help? Contact us directly.
+            {t.helpCenter.contactText}
             </Text>
 
             <Text style={styles.email}>
-              support@koyawi.com
+             {t.helpCenter.contactEmail}
             </Text>
           </View>
         </Section>

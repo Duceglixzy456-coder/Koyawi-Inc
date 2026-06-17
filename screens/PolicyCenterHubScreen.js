@@ -2,8 +2,10 @@ import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ScreenHeader from "../components/ScreenHeader";
-
+import { useLanguage } from "../Context/LanguageContext";
+import { translations } from "../utils/translations";
 function HubItem({ icon, label, onPress }) {
+  
   return (
     <TouchableOpacity style={styles.item} onPress={onPress}>
       <View style={styles.left}>
@@ -16,40 +18,41 @@ function HubItem({ icon, label, onPress }) {
 }
 
 export default function PolicyCenterHubScreen({ navigation }) {
+      const { language } = useLanguage();
+const t = translations[language];
   return (
     <View style={{ flex: 1, backgroundColor: "#f4f5f7" }}>
+        <ScreenHeader
+  title={t.policy.title}
+  navigation={navigation}
+/>
       
       {/* HEADER (floating consistent style) */}
-      <ScreenHeader 
-        title="Policy Center" 
-        navigation={navigation} 
-      />
-
+   
       {/* CONTENT */}
       <View style={styles.container}>
         
-        <Text style={styles.sub}>
-          Legal, safety, and transparency information for KOYAWI
-        </Text>
-
+       <Text style={styles.sub}>
+  {t.policy.subtitle}
+</Text>
         <View style={styles.card}>
-          <HubItem
-            icon="shield-checkmark-outline"
-            label="Privacy Policy"
-            onPress={() => navigation.navigate("PrivacyPolicy")}
-          />
+        <HubItem
+  icon="shield-checkmark-outline"
+  label={t.policy.privacy}
+  onPress={() => navigation.navigate("PrivacyPolicy")}
+/>
 
-          <HubItem
-            icon="document-text-outline"
-            label="Terms & Policies"
-            onPress={() => navigation.navigate("TermsPolicies")}
-          />
+<HubItem
+  icon="document-text-outline"
+  label={t.policy.terms}
+  onPress={() => navigation.navigate("TermsPolicies")}
+/>
 
-          <HubItem
-            icon="people-outline"
-            label="Community Guidelines"
-            onPress={() => navigation.navigate("CommunityGuidelines")}
-          />
+<HubItem
+  icon="people-outline"
+  label={t.policy.community}
+  onPress={() => navigation.navigate("CommunityGuidelines")}
+/>
         </View>
 
       </View>

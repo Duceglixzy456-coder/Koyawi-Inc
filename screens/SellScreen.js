@@ -118,7 +118,7 @@ function SellScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  };
+  }; 
 
   const inputStyle = {
     backgroundColor: Colors.card,

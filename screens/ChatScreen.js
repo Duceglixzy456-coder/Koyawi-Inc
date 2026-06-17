@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -11,16 +12,19 @@ import {
   Pressable,
 } from "react-native";
 
-import React, { useState, useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 
+import { useLanguage } from "../Context/LanguageContext"; // ✅ FIXED
+import { translations } from "../utils/translations";
+
 export default function ChatScreen({ route, navigation }) {
   const conversationId = route?.params?.conversationId;
   const otherUserId = route?.params?.otherUserId;
   const listingTitle = route?.params?.listingTitle;
+ 
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -31,7 +35,8 @@ export default function ChatScreen({ route, navigation }) {
   const [actionVisible, setActionVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-
+  const { language, toggleLanguage } = useLanguage();
+  const t = translations[language];
   const ws = useRef(null);
 
   // ---------------- USER ----------------
@@ -270,7 +275,7 @@ return (
           marginBottom: 10,
         }}
       >
-        {listingTitle || "Chat"}
+       {listingTitle || t.chat}
       </Text>
 
       {/* MESSAGES */}
@@ -334,7 +339,7 @@ return (
             borderRadius: 20,
           }}
         >
-          <Text style={{ color: "#fff" }}>Send</Text>
+        <Text style={{ color: "#fff" }}>{t.send}</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
