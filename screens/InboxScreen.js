@@ -13,7 +13,7 @@ import React, { useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
 import { RefreshControl } from "react-native";
-import { Swipeable } from "react-native-gesture-handler";
+
 
 export default function InboxScreen({ navigation }) {
   const [conversations, setConversations] = useState([]);
@@ -46,7 +46,7 @@ export default function InboxScreen({ navigation }) {
     const userId = decoded.sub;
 
     const res = await fetch(
-      `http://192.168.1.195:8000/conversations/${userId}`,
+      `http://192.168.1.194:8000/conversations/${userId}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -78,15 +78,17 @@ const onRefresh = async () => {
   setRefreshing(false);
 };
   // ================= DELETE CONVERSATION =================
-const deleteConversation = (conversationId) => {
+const handleLongPressConversation = (conversationId) => {
+  if (!conversationId) {
+    console.log("BLOCKED: Missing conversationId");
+    return;
+  }
+
   Alert.alert(
     "Delete Conversation",
-    "Are you sure you want to delete this chat? This cannot be undone.",
+    "This will permanently remove this chat for you.",
     [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
+      { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
@@ -94,8 +96,16 @@ const deleteConversation = (conversationId) => {
           try {
             const token = await AsyncStorage.getItem("access_token");
 
-            await fetch(
-              `http://192.168.1.195:8000/conversations/${conversationId}`,
+            if (!token) {
+              console.log("BLOCKED: No token");
+              return;
+            }
+
+            // prevent double deletion spam
+            setConversations((prev) => prev); 
+
+            const res = await fetch(
+              `http://192.168.1.194:8000/conversations/${conversationId}`,
               {
                 method: "DELETE",
                 headers: {
@@ -104,114 +114,92 @@ const deleteConversation = (conversationId) => {
               }
             );
 
+            // safer response handling
+            const data = await res.json().catch(() => null);
+
+            if (!res.ok) {
+              console.log("DELETE FAILED:", data || res.status);
+              Alert.alert("Error", "Could not delete conversation.");
+              return;
+            }
+
+            // safe UI update
             setConversations((prev) =>
               prev.filter((c) => c._id !== conversationId)
             );
+
           } catch (err) {
             console.log("DELETE CONVO ERROR:", err);
+            Alert.alert("Error", "Network error. Try again.");
           }
         },
       },
-    ]
+    ],
+    { cancelable: true }
   );
 };
-  // ================= RIGHT SWIPE ACTION =================
-  const renderRightActions = (item) => {
-    const canDelete =
-      item.buyer_id === currentUserId ||
-      item.seller_id === currentUserId;
-
-    if (!canDelete) return null;
-
-    return (
-      <TouchableOpacity
-        onPress={() => deleteConversation(item._id)}
-        style={{
-          backgroundColor: "red",
-          justifyContent: "center",
-          alignItems: "center",
-          width: 80,
-          borderRadius: 14,
-          marginBottom: 10,
-        }}
-      >
-        <Text style={{ color: "#fff", fontWeight: "bold" }}>
-          Delete
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
   // ================= RENDER ITEM =================
   const renderItem = ({ item }) => {
-    const otherUserId =
-      item.buyer_id === currentUserId
-        ? item.seller_id
-        : item.buyer_id;
+  const otherUserId =
+    item.buyer_id === currentUserId
+      ? item.seller_id
+      : item.buyer_id;
 
-    return (
-      <Swipeable
-        renderRightActions={() => renderRightActions(item)}
-      >
-        <TouchableOpacity
-          onPress={() =>
-            navigation.navigate("Chat", {
-              conversationId: item._id,
-              otherUserId,
-              listingTitle: item.listing_title,
-            })
-          }
-          style={{
-            flexDirection: "row",
-            padding: 14,
-            marginBottom: 10,
-            backgroundColor: "#fff",
-            borderRadius: 14,
-            alignItems: "center",
-          }}
-        >
-          <Image
-            source={{
-              uri:
-                item.listing_image ||
-                "https://via.placeholder.com/100",
-            }}
-            style={{
-              width: 45,
-              height: 45,
-              borderRadius: 12,
-              marginRight: 12,
-            }}
-          />
+  return (
+    <TouchableOpacity
+      onPress={() =>
+        navigation.navigate("Chat", {
+          conversationId: item._id,
+          otherUserId,
+          listingTitle: item.listing_title,
+        })
+      }
+      onLongPress={() => handleLongPressConversation(item._id)}
+      delayLongPress={400}
+      style={{
+        flexDirection: "row",
+        padding: 14,
+        marginBottom: 10,
+        backgroundColor: "#fff",
+        borderRadius: 14,
+        alignItems: "center",
+      }}
+    >
+      <Image
+        source={{
+          uri: item.listing_image || "https://via.placeholder.com/100",
+        }}
+        style={{
+          width: 45,
+          height: 45,
+          borderRadius: 12,
+          marginRight: 12,
+        }}
+      />
 
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{ fontSize: 15, fontWeight: "600" }}
-              numberOfLines={1}
-            >
-              {item.listing_title || "Untitled Listing"}
-            </Text>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 15, fontWeight: "600" }} numberOfLines={1}>
+          {item.listing_title || "Untitled Listing"}
+        </Text>
 
-            <Text style={{ fontSize: 13, color: "#777" }} numberOfLines={1}>
-              {item.last_message || "No messages yet"}
-            </Text>
-          </View>
+        <Text style={{ fontSize: 13, color: "#777" }} numberOfLines={1}>
+          {item.last_message || "No messages yet"}
+        </Text>
+      </View>
 
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={{ fontSize: 11, color: "#999" }}>
-              {item.updated_at
-                ? new Date(item.updated_at).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : ""}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </Swipeable>
-    );
-  };
-
+      <View style={{ alignItems: "flex-end" }}>
+        <Text style={{ fontSize: 11, color: "#999" }}>
+          {item.updated_at
+            ? new Date(item.updated_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : ""}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
   // ================= UI =================
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F6F7FB" }}>

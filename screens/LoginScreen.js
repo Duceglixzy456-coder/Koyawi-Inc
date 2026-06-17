@@ -7,6 +7,7 @@ import {
   Alert,
 } from "react-native";
 
+
 import AuthContext from "../Context/AuthContext";
 
 export default function LoginScreen({ navigation }) {
@@ -33,7 +34,7 @@ export default function LoginScreen({ navigation }) {
       setLoading(true);
 
       const res = await fetch(
-        "http://192.168.1.195:8000/login",
+        "http://192.168.1.194:8000/login",
         {
           method: "POST",
           headers: {

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,15 +17,24 @@ import * as ImagePicker from "expo-image-picker";
 import { Colors } from "../theme/colors";
 
 function SellScreen({ navigation }) {
-  const [token, setToken] = React.useState(null);
+  const [token, setToken] = useState(null);
 
-  const [title, setTitle] = React.useState("");
-  const [price, setPrice] = React.useState("");
-  const [description, setDescription] = React.useState("");
-  const [image, setImage] = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
+  const [title, setTitle] = useState("");
+  const [price, setPrice] = useState("");
+  const [description, setDescription] = useState("");
+  const [image, setImage] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [category, setCategory] = useState("Cars");
 
-  React.useEffect(() => {
+  const categories = [
+    "Cars",
+    "Electronics",
+    "Clothes",
+    "Sneakers",
+    "Essentials",
+  ];
+
+  useEffect(() => {
     const loadToken = async () => {
       const stored = await AsyncStorage.getItem("access_token");
       setToken(stored);
@@ -35,20 +44,20 @@ function SellScreen({ navigation }) {
   }, []);
 
   const pickImage = async () => {
-  try {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 1,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 1,
+      });
 
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
+      if (!result.canceled) {
+        setImage(result.assets[0].uri);
+      }
+    } catch (err) {
+      console.log("IMAGE PICK ERROR:", err);
     }
-  } catch (err) {
-    console.log("IMAGE PICK ERROR:", err);
-  }
-};
+  };
 
   const createListing = async () => {
     try {
@@ -60,7 +69,6 @@ function SellScreen({ navigation }) {
       }
 
       const cleanPrice = Number(price.replace(/[$,]/g, ""));
-
       if (isNaN(cleanPrice) || cleanPrice <= 0) {
         alert("Enter a valid price.");
         return;
@@ -70,23 +78,25 @@ function SellScreen({ navigation }) {
 
       const formData = new FormData();
 
-formData.append("title", title.trim());
-formData.append("price", cleanPrice);
-formData.append("description", description.trim());
+      formData.append("title", title);
+      formData.append("price", price);
+      formData.append("description", description);
+      formData.append("category", category);
 
-formData.append("file", {
-  uri: image,
-  name: "photo.jpg",
-  type: "image/jpeg",
-});
+      formData.append("file", {
+        uri: image,
+        type: "image/jpeg",
+        name: "photo.jpg",
+      });
 
-const res = await fetch("http://192.168.1.195:8000/listings", {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${token}`,
-  },
-  body: formData,
-});
+      const res = await fetch("http://192.168.1.194:8000/listings", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
       const data = await res.json();
 
       if (!res.ok) {
@@ -95,11 +105,11 @@ const res = await fetch("http://192.168.1.195:8000/listings", {
         return;
       }
 
-      // reset form
       setTitle("");
       setPrice("");
       setDescription("");
       setImage(null);
+      setCategory("Cars");
 
       navigation.navigate("Home");
     } catch (err) {
@@ -121,28 +131,16 @@ const res = await fetch("http://192.168.1.195:8000/listings", {
   };
 
   return (
-  <KeyboardAvoidingView
-    behavior={Platform.OS === "ios" ? "padding" : "height"}
-    style={{ flex: 1, backgroundColor: Colors.background }}
-  >
-    <ScrollView
-      contentContainerStyle={{
-        padding: 20,
-        paddingTop: 100,
-        flexGrow: 1,
-      }}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1, backgroundColor: Colors.background }}
     >
-      <Text
-        style={{
-          fontSize: 28,
-          fontWeight: "700",
-          marginBottom: 18,
-          color: Colors.text,
-        }}
-      >
-        Sell your item
-      </Text>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 100 }}>
+        <Text style={{ fontSize: 28, fontWeight: "700", marginBottom: 18 }}>
+          Sell your item
+        </Text>
 
+        {/* IMAGE */}
         <TouchableOpacity
           onPress={pickImage}
           style={{
@@ -156,30 +154,16 @@ const res = await fetch("http://192.168.1.195:8000/listings", {
           }}
         >
           {image ? (
-            <Image
-              source={{ uri: image }}
-              style={{ width: "100%", height: "100%" }}
-            />
+            <Image source={{ uri: image }} style={{ width: "100%", height: "100%" }} />
           ) : (
-            <Text style={{ color: Colors.text }}>Tap to add photo</Text>
+            <Text>Tap to add photo</Text>
           )}
         </TouchableOpacity>
 
-        <TextInput
-          placeholder="Title"
-          value={title}
-          onChangeText={setTitle}
-          style={inputStyle}
-          placeholderTextColor="#888"
-        />
+        {/* INPUTS */}
+        <TextInput placeholder="Title" value={title} onChangeText={setTitle} style={inputStyle} />
 
-        <TextInput
-          placeholder="Price"
-          value={price}
-          onChangeText={setPrice}
-          style={inputStyle}
-          placeholderTextColor="#888"
-        />
+        <TextInput placeholder="Price" value={price} onChangeText={setPrice} style={inputStyle} />
 
         <TextInput
           placeholder="Description"
@@ -187,9 +171,36 @@ const res = await fetch("http://192.168.1.195:8000/listings", {
           onChangeText={setDescription}
           style={[inputStyle, { height: 120 }]}
           multiline
-          placeholderTextColor="#888"
         />
 
+        {/* CATEGORY PICKER */}
+        <Text style={{ fontWeight: "600", marginBottom: 8 }}>Category</Text>
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 15 }}>
+          {categories.map((item) => {
+            const active = category === item;
+
+            return (
+              <TouchableOpacity
+                key={item}
+                onPress={() => setCategory(item)}
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 20,
+                  margin: 5,
+                  backgroundColor: active ? "#111" : "#eee",
+                }}
+              >
+                <Text style={{ color: active ? "#fff" : "#333", fontWeight: "600" }}>
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* BUTTON */}
         <TouchableOpacity
           onPress={createListing}
           style={{

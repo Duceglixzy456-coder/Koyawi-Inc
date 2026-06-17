@@ -1,25 +1,36 @@
 import {
   View,
   Text,
+  Alert,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   FlatList,
+  Modal,
+  Pressable,
 } from "react-native";
 
 import React, { useState, useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Clipboard from "expo-clipboard";
 
 export default function ChatScreen({ route, navigation }) {
   const conversationId = route?.params?.conversationId;
   const otherUserId = route?.params?.otherUserId;
-const listingTitle = route?.params?.listingTitle;
+  const listingTitle = route?.params?.listingTitle;
+
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [currentUserId, setCurrentUserId] = useState(null);
+
+  const [replyTo, setReplyTo] = useState(null);
+
+  const [actionVisible, setActionVisible] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
 
   const ws = useRef(null);
 
@@ -37,29 +48,94 @@ const listingTitle = route?.params?.listingTitle;
   }, []);
 
   // ---------------- LOAD MESSAGES ----------------
-  const loadMessages = async () => {
-    if (!conversationId) return;
-
-    const res = await fetch(
-      `http://192.168.1.195:8000/messages/${conversationId}`
-    );
-
-    const data = await res.json();
-
-    const sorted = data.sort(
-      (a, b) => new Date(a.created_at) - new Date(b.created_at)
-    );
-
-    setMessages(sorted);
-  };
-
   useEffect(() => {
+    const loadMessages = async () => {
+      if (!conversationId) return;
+
+      const res = await fetch(
+        `http://192.168.1.194:8000/messages/${conversationId}`
+      );
+
+      const data = await res.json();
+
+      const sorted = data.sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
+
+      setMessages(sorted);
+    };
+
     loadMessages();
   }, [conversationId]);
 
-  // ---------------- REFRESH ----------------
-  const refreshMessages = async () => {
-    await loadMessages();
+  // ---------------- DELETE ----------------
+  const handleDeleteMessage = async (message) => {
+  if (!message?._id) return;
+
+  Alert.alert(
+    "Delete Message",
+    "Are you sure you want to delete this message?",
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const token = await AsyncStorage.getItem("access_token");
+
+            // Save current messages for rollback
+            const previousMessages = messages;
+
+            // Remove immediately from UI
+            setMessages((prev) =>
+              prev.filter((m) => m._id !== message._id)
+            );
+
+            const res = await fetch(
+              `http://192.168.1.194:8000/messages/${message._id}`,
+              {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+
+            if (!res.ok) {
+              // Restore if backend fails
+              setMessages(previousMessages);
+
+              Alert.alert(
+                "Error",
+                "Could not delete message."
+              );
+
+              return;
+            }
+          } catch (err) {
+            console.log("DELETE ERROR:", err);
+
+            Alert.alert(
+              "Error",
+              "Network error while deleting."
+            );
+          }
+        },
+      },
+    ]
+  );
+};
+  // ---------------- OPEN MENU ----------------
+  const openMessageActions = (message, event) => {
+    const { pageX, pageY } = event.nativeEvent;
+
+    setSelectedMessage(message);
+    setMenuPosition({ x: pageX, y: pageY });
+    setActionVisible(true);
   };
 
   // ---------------- SEND ----------------
@@ -74,14 +150,16 @@ const listingTitle = route?.params?.listingTitle;
       text: msg,
       sender_id: currentUserId,
       created_at: new Date().toISOString(),
+      replyTo: replyTo || null,
     };
 
     setMessages((prev) => [...prev, newMessage]);
+    setReplyTo(null);
 
     ws.current?.send(
       JSON.stringify({
-        receiver_id: otherUserId,
         text: msg,
+        receiver_id: otherUserId,
         conversation_id: conversationId,
         sender_id: currentUserId,
       })
@@ -97,7 +175,7 @@ const listingTitle = route?.params?.listingTitle;
       const decoded = jwtDecode(token);
 
       const socket = new WebSocket(
-        `ws://192.168.1.195:8000/ws/${decoded.sub}`
+        `ws://192.168.1.194:8000/ws/${decoded.sub}`
       );
 
       ws.current = socket;
@@ -106,10 +184,10 @@ const listingTitle = route?.params?.listingTitle;
         const msg = JSON.parse(event.data);
 
         const newMessage = {
-          _id: msg._id || Date.now().toString(),
-          text: msg.text,
+          _id: Date.now().toString(),
+          text: msg.text || msg,
           sender_id: msg.sender_id,
-          created_at: msg.created_at || new Date().toISOString(),
+          created_at: new Date().toISOString(),
         };
 
         setMessages((prev) => [...prev, newMessage]);
@@ -119,14 +197,15 @@ const listingTitle = route?.params?.listingTitle;
     connect();
 
     return () => ws.current?.close();
-  }, [conversationId]);
+  }, []);
 
   // ---------------- RENDER ----------------
   const renderItem = ({ item }) => {
     const isMe = item.sender_id === currentUserId;
 
     return (
-      <View
+      <TouchableOpacity
+        onLongPress={(e) => openMessageActions(item, e)}
         style={{
           alignSelf: isMe ? "flex-end" : "flex-start",
           backgroundColor: isMe ? "#111" : "#fff",
@@ -136,120 +215,199 @@ const listingTitle = route?.params?.listingTitle;
           maxWidth: "80%",
         }}
       >
+        {item.replyTo && (
+          <View
+            style={{
+              backgroundColor: "#eee",
+              padding: 6,
+              borderRadius: 8,
+              marginBottom: 6,
+            }}
+          >
+            <Text style={{ fontSize: 11 }}>Replying to:</Text>
+            <Text numberOfLines={1}>{item.replyTo.text}</Text>
+          </View>
+        )}
+
         <Text style={{ color: isMe ? "#fff" : "#000" }}>
           {item.text}
         </Text>
-      </View>
+      </TouchableOpacity>
     );
   };
 
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+  // ---------------- UI ----------------
+return (
+  <SafeAreaView style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      {/* BACK BUTTON */}
+      <TouchableOpacity
+        onPress={() => navigation.goBack()}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 15,
+          backgroundColor: "rgba(255,255,255,0.25)",
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          borderRadius: 14,
+          zIndex: 999,
+        }}
       >
+        <Text style={{ fontSize: 16, fontWeight: "600" }}>←</Text>
+      </TouchableOpacity>
 
-        {/* FLOATING BACK BUTTON */}
-<View
-  style={{
-    position: "absolute",
-    top: 0,
-    left: 15,
-    zIndex: 999,
-  }}
->
-  <TouchableOpacity
-    onPress={() => navigation.goBack()}
-    style={{
-      backgroundColor: "rgba(255,255,255,0.25)",
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.4)",
-      backdropFilter: "blur(10px)", // iOS only visual support
-    }}
-  >
-    <Text style={{ fontSize: 16, fontWeight: "600" }}>←</Text>
-  </TouchableOpacity>
-</View>
+      {/* TITLE */}
+      <Text
+        style={{
+          fontSize: 18,
+          fontWeight: "bold",
+          textAlign: "center",
+          marginTop: 0,
+          marginBottom: 10,
+        }}
+      >
+        {listingTitle || "Chat"}
+      </Text>
 
-{/* CHAT TITLE (MINIMAL HEADER) */}
-<View
-  style={{
-    position: "absolute",
-    top: 5,
-    alignSelf: "center",
-    width: "100%",
-    alignItems: "center",
-    zIndex: 500,
-  }}
->
-  <Text
-    numberOfLines={1}
-    style={{
-      fontSize: 14,
-      fontWeight: "600",
-      color: "#333",
-      backgroundColor: "rgba(255,255,255,0.6)",
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 10,
-      overflow: "hidden",
-    }}
-  >
-    {listingTitle || "Chat"}
-  </Text>
-</View>
-        {/* MESSAGES */}
-        <FlatList
-          data={messages}
-          keyExtractor={(item) => item._id}
-          renderItem={renderItem}
-          inverted   // 🔥 THIS IS THE FIX
-          contentContainerStyle={{
-            paddingHorizontal: 12,
-            paddingVertical: 10,
+      {/* MESSAGES */}
+      <FlatList
+        data={messages}
+        keyExtractor={(item) => item._id}
+        renderItem={renderItem}
+        contentContainerStyle={{
+          paddingHorizontal: 12,
+          paddingTop: 10,
+          paddingBottom: 10,
+        }}
+      />
+
+      {/* REPLY BAR */}
+      {replyTo && (
+        <View
+          style={{
+            padding: 8,
+            backgroundColor: "#eee",
+            marginHorizontal: 10,
+            borderRadius: 10,
+          }}
+        >
+          <Text>Replying to: {replyTo.text}</Text>
+
+          <TouchableOpacity onPress={() => setReplyTo(null)}>
+            <Text style={{ color: "red", marginTop: 4 }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* INPUT */}
+      <View
+        style={{
+          flexDirection: "row",
+          padding: 10,
+          backgroundColor: "#fff",
+          alignItems: "center",
+        }}
+      >
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          placeholder="Message..."
+          style={{
+            flex: 1,
+            backgroundColor: "#f2f3f5",
+            padding: 10,
+            borderRadius: 20,
           }}
         />
 
-        {/* INPUT */}
-        <View
+        <TouchableOpacity
+          onPress={sendMessage}
           style={{
-            flexDirection: "row",
-            padding: 10,
-            backgroundColor: "#fff",
-            alignItems: "center",
+            marginLeft: 10,
+            backgroundColor: "#111",
+            paddingVertical: 10,
+            paddingHorizontal: 14,
+            borderRadius: 20,
           }}
         >
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder="Message..."
-            style={{
-              flex: 1,
-              backgroundColor: "#f2f3f5",
-              padding: 10,
-              borderRadius: 20,
-            }}
-          />
+          <Text style={{ color: "#fff" }}>Send</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
 
-          <TouchableOpacity
-            onPress={sendMessage}
+    {/* MESSAGE ACTION MODAL */}
+    {actionVisible && selectedMessage && (
+      <Modal transparent animationType="fade">
+        <Pressable
+          onPress={() => {
+            setActionVisible(false);
+            setSelectedMessage(null);
+          }}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.3)",
+          }}
+        >
+          <View
             style={{
-              marginLeft: 10,
-              backgroundColor: "#111",
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 20,
+              position: "absolute",
+              top: Math.max(menuPosition.y - 100, 60),
+              left: Math.max(menuPosition.x - 80, 20),
+              backgroundColor: "#fff",
+              borderRadius: 10,
+              width: 150,
+              overflow: "hidden",
             }}
           >
-            <Text style={{ color: "#fff" }}>Send</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  await Clipboard.setStringAsync(
+                    selectedMessage.text || ""
+                  );
+                  Alert.alert("Copied", "Message copied");
+                } catch (err) {
+                  Alert.alert("Error", "Could not copy");
+                }
+                setActionVisible(false);
+                setSelectedMessage(null);
+              }}
+              style={{ padding: 12 }}
+            >
+              <Text>Copy</Text>
+            </TouchableOpacity>
 
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+            <TouchableOpacity
+              onPress={() => {
+                setReplyTo(selectedMessage);
+                setActionVisible(false);
+                setSelectedMessage(null);
+              }}
+              style={{ padding: 12 }}
+            >
+              <Text>Reply</Text>
+            </TouchableOpacity>
+
+            {selectedMessage?.sender_id === currentUserId && (
+              <TouchableOpacity
+                onPress={() => {
+                  handleDeleteMessage(selectedMessage);
+                  setActionVisible(false);
+                  setSelectedMessage(null);
+                }}
+                style={{ padding: 12 }}
+              >
+                <Text style={{ color: "red" }}>Delete</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+    )}
+  </SafeAreaView>
+);
 }

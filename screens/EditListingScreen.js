@@ -1,6 +1,14 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ScrollView,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import ScreenHeader from "../components/ScreenHeader";
 
 export default function EditListingScreen({ route, navigation }) {
   const { listing } = route.params;
@@ -17,7 +25,7 @@ export default function EditListingScreen({ route, navigation }) {
       const token = await AsyncStorage.getItem("access_token");
 
       const res = await fetch(
-        `http://192.168.1.195:8000/listings/${listing._id}`,
+        `http://192.168.1.194:8000/listings/${listing._id}`,
         {
           method: "PUT",
           headers: {
@@ -40,7 +48,6 @@ export default function EditListingScreen({ route, navigation }) {
       }
 
       Alert.alert("Success", "Listing updated");
-
       navigation.goBack();
 
     } catch (err) {
@@ -52,65 +59,75 @@ export default function EditListingScreen({ route, navigation }) {
   };
 
   return (
-    <View style={{ flex: 1, padding: 20, backgroundColor: "#f2f3f5" }}>
-
-      <Text style={{ fontSize: 22, fontWeight: "bold", marginBottom: 20 }}>
-        Edit Listing
-      </Text>
-
-      <TextInput
-        value={title}
-        onChangeText={setTitle}
-        placeholder="Title"
-        style={{
-          backgroundColor: "#fff",
-          padding: 12,
-          borderRadius: 10,
-          marginBottom: 10,
-        }}
+    <View style={{ flex: 1, backgroundColor: "#f4f5f7" }}>
+      
+      {/* HEADER */}
+      <ScreenHeader 
+        title="Edit Listing" 
+        navigation={navigation} 
       />
 
-      <TextInput
-        value={price}
-        onChangeText={setPrice}
-        placeholder="Price"
-        keyboardType="numeric"
-        style={{
-          backgroundColor: "#fff",
-          padding: 12,
-          borderRadius: 10,
-          marginBottom: 10,
-        }}
-      />
-
-      <TextInput
-        value={description}
-        onChangeText={setDescription}
-        placeholder="Description"
-        multiline
-        style={{
-          backgroundColor: "#fff",
-          padding: 12,
-          borderRadius: 10,
-          height: 120,
-        }}
-      />
-
-      <TouchableOpacity
-        onPress={updateListing}
-        disabled={loading}
-        style={{
-          marginTop: 20,
-          backgroundColor: "#000",
-          padding: 14,
-          borderRadius: 10,
-        }}
+      {/* CONTENT */}
+      <ScrollView
+        style={{ paddingHorizontal: 16, paddingTop: 10 }}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={{ color: "#fff", textAlign: "center" }}>
-          {loading ? "Updating..." : "Save Changes"}
-        </Text>
-      </TouchableOpacity>
 
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          placeholder="Title"
+          style={{
+            backgroundColor: "#fff",
+            padding: 12,
+            borderRadius: 10,
+            marginBottom: 10,
+          }}
+        />
+
+        <TextInput
+          value={price}
+          onChangeText={setPrice}
+          placeholder="Price"
+          keyboardType="numeric"
+          style={{
+            backgroundColor: "#fff",
+            padding: 12,
+            borderRadius: 10,
+            marginBottom: 10,
+          }}
+        />
+
+        <TextInput
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Description"
+          multiline
+          style={{
+            backgroundColor: "#fff",
+            padding: 12,
+            borderRadius: 10,
+            height: 120,
+          }}
+        />
+
+        <TouchableOpacity
+          onPress={updateListing}
+          disabled={loading}
+          style={{
+            marginTop: 20,
+            backgroundColor: "#000",
+            padding: 14,
+            borderRadius: 10,
+          }}
+        >
+          <Text style={{ color: "#fff", textAlign: "center" }}>
+            {loading ? "Updating..." : "Save Changes"}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </View>
   );
 }

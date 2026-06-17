@@ -12,43 +12,44 @@ export default function SavedItemsScreen({ navigation }) {
   const [saved, setSaved] = useState([]);
 
   const fetchSaved = async () => {
-    try {
-      const token = await AsyncStorage.getItem("access_token");
+  try {
+    const token = await AsyncStorage.getItem("access_token");
 
-      const res = await fetch("http://192.168.1.195:8000/saved", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    const res = await fetch("http://192.168.1.194:8000/saved", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-      const data = await res.json();
-      setSaved(data);
-    } catch (err) {
-      console.log("SAVED ERROR:", err);
-    }
-  };
+    const data = await res.json();
+
+    console.log("SAVED RAW:", data);
+
+    setSaved([...data]); // FORCE re-render
+  } catch (err) {
+    console.log("SAVED ERROR:", err);
+    setSaved([]);
+  }
+};
 
   useEffect(() => {
     fetchSaved();
   }, []);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f2f3f5", padding: 10 }}>
+    <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
 
-      {/* 🔙 GLASS BACK BUTTON */}
+      {/* BACK BUTTON */}
       <TouchableOpacity
         onPress={() => navigation.goBack()}
         style={{
           position: "absolute",
           top: 50,
           left: 15,
-
           backgroundColor: "rgba(255,255,255,0.25)",
           paddingVertical: 8,
           paddingHorizontal: 12,
           borderRadius: 14,
-          borderWidth: 1,
-          borderColor: "rgba(255,255,255,0.4)",
           zIndex: 10,
         }}
       >
@@ -60,8 +61,8 @@ export default function SavedItemsScreen({ navigation }) {
         style={{
           fontSize: 22,
           fontWeight: "bold",
+          marginTop: 60,
           marginBottom: 10,
-          marginTop: 40,
           textAlign: "center",
         }}
       >
@@ -71,9 +72,13 @@ export default function SavedItemsScreen({ navigation }) {
       {/* LIST */}
       <FlatList
         data={saved}
-        numColumns={2}
         keyExtractor={(item) => item._id}
+        numColumns={2}
         columnWrapperStyle={{ justifyContent: "space-between" }}
+        contentContainerStyle={{
+          padding: 10,
+          paddingBottom: 100,
+        }}
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() =>

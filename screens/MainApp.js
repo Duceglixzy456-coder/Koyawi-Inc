@@ -36,7 +36,7 @@ export default function MainApp() {
     >
       <Stack.Screen name="Tabs" component={Tabs} />
 
-      <Stack.Screen name="Chat" component={ChatScreen} />
+ <Stack.Screen name="Chat" component={ChatScreen} />
         
       <Stack.Screen name="SavedItems" component={SavedItemsScreen} />
       <Stack.Screen name="ListingDetailScreen" component={ListingDetailScreen} />

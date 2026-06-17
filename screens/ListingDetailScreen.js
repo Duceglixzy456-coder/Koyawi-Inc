@@ -5,16 +5,16 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  ScrollView,
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
+import ScreenHeader from "../components/ScreenHeader";
 
 export default function ListingDetailScreen({ route, navigation }) {
   const { listing } = route.params;
   const [myUserId, setMyUserId] = React.useState(null);
-
-  console.log("OWNER DEBUG:", listing.owner_id, listing.owner);
 
   React.useEffect(() => {
     const loadUser = async () => {
@@ -31,23 +31,17 @@ export default function ListingDetailScreen({ route, navigation }) {
   const createConversation = async () => {
     try {
       const token = await AsyncStorage.getItem("access_token");
-      if (!token) {
-        console.log("NO TOKEN");
-        return;
-      }
+      if (!token) return;
 
       const decoded = jwtDecode(token);
       const buyerId = decoded.sub;
 
-      const sellerId = listing.owner_id || listing.owner;
+      const sellerId = listing?.owner_id;
 
-      if (!sellerId) {
-        console.log("MISSING SELLER ID");
-        return;
-      }
+      if (!sellerId) return;
 
       const response = await fetch(
-        "http://192.168.1.195:8000/conversations",
+        "http://192.168.1.194:8000/conversations",
         {
           method: "POST",
           headers: {
@@ -63,8 +57,6 @@ export default function ListingDetailScreen({ route, navigation }) {
 
       const data = await response.json();
 
-      console.log("NEW CONVERSATION:", data);
-
       navigation.navigate("Chat", {
         conversationId: data.conversation_id,
       });
@@ -74,14 +66,9 @@ export default function ListingDetailScreen({ route, navigation }) {
   };
 
   const goToSellerProfile = () => {
-    const sellerId = listing.owner_id || listing.owner;
+    const sellerId = listing?.owner_id;
 
-    console.log("OWNER DEBUG:", sellerId);
-
-    if (!sellerId) {
-      console.log("BLOCKED: Missing seller ID");
-      return;
-    }
+    if (!sellerId) return;
 
     navigation.navigate("SellerProfile", {
       userId: sellerId,
@@ -92,8 +79,8 @@ export default function ListingDetailScreen({ route, navigation }) {
     try {
       const token = await AsyncStorage.getItem("access_token");
 
-      const response = await fetch(
-        `http://192.168.1.195:8000/listings/${listing._id}`,
+      await fetch(
+        `http://192.168.1.194:8000/listings/${listing._id}`,
         {
           method: "DELETE",
           headers: {
@@ -102,9 +89,6 @@ export default function ListingDetailScreen({ route, navigation }) {
         }
       );
 
-      const data = await response.json();
-      console.log("DELETE RESULT:", data);
-
       navigation.goBack();
     } catch (err) {
       console.log("DELETE ERROR:", err);
@@ -112,66 +96,53 @@ export default function ListingDetailScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: "#f4f5f7" }}>
+      
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.back}>← Back</Text>
+      <ScreenHeader 
+        title="Listing" 
+        navigation={navigation} 
+      />
+
+      {/* CONTENT */}
+      <ScrollView
+        style={{ paddingHorizontal: 16, paddingTop: 10 }}
+        showsVerticalScrollIndicator={false}
+      >
+
+        <Image source={{ uri: listing.image }} style={styles.image} />
+
+        <Text style={styles.title}>{listing.title}</Text>
+
+        <Text style={styles.price}>${listing.price}</Text>
+
+        <Text style={styles.description}>{listing.description}</Text>
+
+        {/* ACTIONS */}
+        <TouchableOpacity onPress={createConversation} style={styles.messageBtn}>
+          <Text style={styles.messageText}>Message Seller</Text>
         </TouchableOpacity>
-      </View>
 
-      {/* IMAGE */}
-      <Image source={{ uri: listing.image }} style={styles.image} />
-
-      {/* TITLE */}
-      <Text style={styles.title}>{listing.title}</Text>
-
-      {/* PRICE */}
-      <Text style={styles.price}>${listing.price}</Text>
-
-      {/* DESCRIPTION */}
-      <Text style={styles.description}>{listing.description}</Text>
-
-      {/* MESSAGE BUTTON */}
-      <TouchableOpacity onPress={createConversation} style={styles.messageBtn}>
-        <Text style={styles.messageText}>Message Seller</Text>
-      </TouchableOpacity>
-
-      {/* PROFILE BUTTON */}
-      <TouchableOpacity onPress={goToSellerProfile} style={styles.profileBtn}>
-        <Text style={styles.profileText}>View Seller Profile</Text>
-      </TouchableOpacity>
-
-      {/* DELETE BUTTON */}
-      {listing.owner_id === myUserId && (
-        <TouchableOpacity onPress={deleteListing} style={styles.deleteBtn}>
-          <Text style={styles.deleteText}>Delete Listing</Text>
+        <TouchableOpacity onPress={goToSellerProfile} style={styles.profileBtn}>
+          <Text style={styles.profileText}>View Seller Profile</Text>
         </TouchableOpacity>
-      )}
+
+        {myUserId && listing.owner_id === myUserId && (
+          <TouchableOpacity onPress={deleteListing} style={styles.deleteBtn}>
+            <Text style={styles.deleteText}>Delete Listing</Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f2f3f5",
-    padding: 15,
-  },
-
-  header: {
-    paddingTop: 50,
-    paddingBottom: 10,
-  },
-
-  back: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-
   image: {
     width: "100%",
-    height: 250,
+    height: 260,
     borderRadius: 12,
   },
 
@@ -183,13 +154,14 @@ const styles = StyleSheet.create({
 
   price: {
     fontSize: 18,
-    marginTop: 5,
+    marginTop: 6,
     fontWeight: "600",
   },
 
   description: {
     marginTop: 10,
     color: "#555",
+    lineHeight: 20,
   },
 
   messageBtn: {
