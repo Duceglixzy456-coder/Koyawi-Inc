@@ -12,6 +12,10 @@ import SellerProfileScreen from "./SellerProfileScreen";
 import HelpCenterScreen from "./HelpCenterScreen";
 import InboxScreen from "./InboxScreen";
 import ChatScreen from "./ChatScreen";
+import FollowersScreen from "./FollowersScreen";
+
+// ✅ ADD THIS
+
 
 const Stack = createNativeStackNavigator();
 
@@ -30,21 +34,27 @@ export default function MainApp() {
   }, []);
 
   return (
-    <Stack.Navigator
-      initialRouteName="Tabs"
-      screenOptions={{ headerShown: false }}
-    >
-      <Stack.Screen name="Tabs" component={Tabs} />
+    
+      <Stack.Navigator
+        initialRouteName="Tabs"
+        screenOptions={{ headerShown: false }}
+      >
+        <Stack.Screen name="Tabs" component={Tabs} />
 
- <Stack.Screen name="Chat" component={ChatScreen} />
-        
-      <Stack.Screen name="SavedItems" component={SavedItemsScreen} />
-      <Stack.Screen name="ListingDetailScreen" component={ListingDetailScreen} />
-      <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
-      <Stack.Screen name="SellerProfile" component={SellerProfileScreen} />
-      <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
-      <Stack.Screen name="Inbox" component={InboxScreen} />
-      <Stack.Screen name="Transactions" component={TransactionsScreen} />
-    </Stack.Navigator>
+        <Stack.Screen name="Chat" component={ChatScreen} />
+
+        <Stack.Screen name="SavedItems" component={SavedItemsScreen} />
+        <Stack.Screen name="ListingDetailScreen" component={ListingDetailScreen} />
+        <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+
+        <Stack.Screen name="SellerProfile" component={SellerProfileScreen} />
+
+        <Stack.Screen name="FollowersScreen" component={FollowersScreen} />
+
+        <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+        <Stack.Screen name="Inbox" component={InboxScreen} />
+        <Stack.Screen name="Transactions" component={TransactionsScreen} />
+      </Stack.Navigator>
+    
   );
 }

@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { jwtDecode } from "jwt-decode";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { translations } from "../utils/translations";
@@ -36,6 +37,20 @@ function Section({ title, children }) {
 export default function ProfileScreen({ navigation }) {
 const { language, toggleLanguage } = useLanguage();
 const t = translations[language];
+const getCurrentUserId = async () => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+
+    if (!token) return null;
+
+    const decoded = jwtDecode(token);
+
+    return decoded.user_id || decoded.id;
+  } catch (err) {
+    console.log("USER ID ERROR:", err);
+    return null;
+  }
+};
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
@@ -92,8 +107,18 @@ const t = translations[language];
         label={t.savedItems}
         onPress={() => navigation.navigate("SavedItems")}
       />
-      <MenuItem icon="people-outline" label={t.followers} />
-      <MenuItem icon="person-add-outline" label={t.following} />
+
+   <MenuItem
+  icon="people-outline"
+  label={t.followers}
+  onPress={() => {
+    console.log("FOLLOWERS CLICKED");
+    navigation.navigate("FollowersScreen", {
+      userId: "test123",
+    });
+  }}
+/>
+
     </Section>
 
     {/* SETTINGS */}
@@ -102,7 +127,6 @@ const t = translations[language];
       <MenuItem icon="lock-closed-outline" label={t.privateAccount} />
       <MenuItem icon="shield-checkmark-outline" label={t.security} />
 
-      {/* LANGUAGE TOGGLE */}
       <MenuItem
         icon="language-outline"
         label={
@@ -118,14 +142,19 @@ const t = translations[language];
     <Section title={t.support}>
       <MenuItem
         icon="help-circle-outline"
-       label={t.helpCenter?.title || "Help Center"}
+        label={t.helpCenter?.title || "Help Center"}
         onPress={() => navigation.navigate("HelpCenter")}
       />
-      <MenuItem icon="alert-circle-outline" label={t.reportProblem} />
+
+      <MenuItem
+        icon="alert-circle-outline"
+        label={t.reportProblem}
+        onPress={() => navigation.navigate("HelpCenter")}
+      />
 
       <MenuItem
         icon="document-text-outline"
-       label={t.policy?.title || "Policy Center"}
+        label={t.policy?.title || "Policy Center"}
         onPress={() => navigation.navigate("PolicyCenter")}
       />
     </Section>
@@ -139,15 +168,19 @@ const t = translations[language];
         <Text style={styles.dangerText}>{t.deactivate}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.logout} onPress={handleLogout}>
+      <TouchableOpacity
+        style={styles.logout}
+        onPress={handleLogout}
+      >
         <Text style={styles.logoutText}>{t.logout}</Text>
       </TouchableOpacity>
     </View>
 
     <View style={{ height: 40 }} />
-  </ScrollView>
-);
+    </ScrollView>
+  );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

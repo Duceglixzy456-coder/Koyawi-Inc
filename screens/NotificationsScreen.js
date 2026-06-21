@@ -17,18 +17,27 @@ export default function NotificationsScreen() {
 
   // ================= TIME AGO =================
   const timeAgo = (date) => {
-    if (!date) return "";
+  if (!date) return "";
 
-    const parsed = new Date(date);
-    if (isNaN(parsed.getTime())) return "";
+  const now = new Date();
+  const past = new Date(date);
 
-    const diff = Math.floor((Date.now() - parsed) / 1000);
+  const diffMs = now - past;
 
-    if (diff < 60) return "just now";
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  };
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const weeks = Math.floor(days / 7);
+  const years = Math.floor(days / 365);
+
+  if (seconds < 60) return "just now";
+  if (minutes < 60) return `${minutes} min${minutes === 1 ? "" : "s"} ago`;
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (weeks < 52) return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+  return `${years} year${years === 1 ? "" : "s"} ago`;
+};
 
   // ================= FETCH =================
   const fetchNotifications = async () => {
@@ -50,6 +59,7 @@ export default function NotificationsScreen() {
       setNotifications(Array.isArray(data) ? data : []);
     } catch (err) {
       console.log("NOTIFICATIONS ERROR:", err);
+      console.log("NOTIF DATE:", item.created_at);
       setNotifications([]);
     } finally {
       setLoading(false);

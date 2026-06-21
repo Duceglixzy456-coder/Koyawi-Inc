@@ -1,7 +1,13 @@
-import React, { createContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
+
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be inside AuthProvider");
+  return ctx;
+};
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
@@ -9,40 +15,24 @@ export const AuthProvider = ({ children }) => {
 
   const TOKEN_KEY = "access_token";
 
-  // load token when app starts
   useEffect(() => {
-    const loadToken = async () => {
-      try {
-        const storedToken = await AsyncStorage.getItem(TOKEN_KEY);
-        setToken(storedToken);
-      } catch (err) {
-        console.log("Error loading token:", err);
-      } finally {
-        setLoading(false);
-      }
+    const load = async () => {
+      const stored = await AsyncStorage.getItem(TOKEN_KEY);
+      setToken(stored);
+      setLoading(false);
     };
 
-    loadToken();
+    load();
   }, []);
 
-  // login function
   const login = async (newToken) => {
-    try {
-      await AsyncStorage.setItem(TOKEN_KEY, newToken);
-      setToken(newToken);
-    } catch (err) {
-      console.log("Login error:", err);
-    }
+    await AsyncStorage.setItem(TOKEN_KEY, newToken);
+    setToken(newToken);
   };
 
-  // logout function
   const logout = async () => {
-    try {
-      await AsyncStorage.removeItem(TOKEN_KEY);
-      setToken(null);
-    } catch (err) {
-      console.log("Logout error:", err);
-    }
+    await AsyncStorage.removeItem(TOKEN_KEY);
+    setToken(null);
   };
 
   return (
@@ -51,5 +41,3 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
-
-export default AuthContext;

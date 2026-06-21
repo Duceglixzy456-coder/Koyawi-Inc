@@ -9,7 +9,7 @@ import {
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { jwtDecode } from "jwt-decode";
+import  jwtDecode  from "jwt-decode";
 import ScreenHeader from "../components/ScreenHeader";
 
 export default function ListingDetailScreen({ route, navigation }) {

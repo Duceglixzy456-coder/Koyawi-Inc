@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,18 +13,16 @@ import {
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { jwtDecode } from "jwt-decode";
+import  jwtDecode  from "jwt-decode";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Clipboard from "expo-clipboard";
 
-import { useLanguage } from "../Context/LanguageContext"; // ✅ FIXED
+import { useLanguage } from "../Context/LanguageContext";
 import { translations } from "../utils/translations";
 
 export default function ChatScreen({ route, navigation }) {
   const conversationId = route?.params?.conversationId;
   const otherUserId = route?.params?.otherUserId;
   const listingTitle = route?.params?.listingTitle;
- 
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -34,10 +32,9 @@ export default function ChatScreen({ route, navigation }) {
 
   const [actionVisible, setActionVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-  const { language, toggleLanguage } = useLanguage();
+
+  const { language } = useLanguage();
   const t = translations[language];
-  const ws = useRef(null);
 
   // ---------------- USER ----------------
   useEffect(() => {
@@ -57,94 +54,28 @@ export default function ChatScreen({ route, navigation }) {
     const loadMessages = async () => {
       if (!conversationId) return;
 
-      const res = await fetch(
-        `http://192.168.1.194:8000/messages/${conversationId}`
-      );
+      try {
+        const res = await fetch(
+          `http://192.168.1.194:8000/messages/${conversationId}`
+        );
 
-      const data = await res.json();
+        const data = await res.json();
 
-      const sorted = data.sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at)
-      );
+        const sorted = data.sort(
+          (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        );
 
-      setMessages(sorted);
+        setMessages(sorted);
+      } catch (err) {
+        console.log("LOAD MESSAGES ERROR:", err);
+      }
     };
 
     loadMessages();
   }, [conversationId]);
 
-  // ---------------- DELETE ----------------
-  const handleDeleteMessage = async (message) => {
-  if (!message?._id) return;
-
-  Alert.alert(
-    "Delete Message",
-    "Are you sure you want to delete this message?",
-    [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const token = await AsyncStorage.getItem("access_token");
-
-            // Save current messages for rollback
-            const previousMessages = messages;
-
-            // Remove immediately from UI
-            setMessages((prev) =>
-              prev.filter((m) => m._id !== message._id)
-            );
-
-            const res = await fetch(
-              `http://192.168.1.194:8000/messages/${message._id}`,
-              {
-                method: "DELETE",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
-              }
-            );
-
-            if (!res.ok) {
-              // Restore if backend fails
-              setMessages(previousMessages);
-
-              Alert.alert(
-                "Error",
-                "Could not delete message."
-              );
-
-              return;
-            }
-          } catch (err) {
-            console.log("DELETE ERROR:", err);
-
-            Alert.alert(
-              "Error",
-              "Network error while deleting."
-            );
-          }
-        },
-      },
-    ]
-  );
-};
-  // ---------------- OPEN MENU ----------------
-  const openMessageActions = (message, event) => {
-    const { pageX, pageY } = event.nativeEvent;
-
-    setSelectedMessage(message);
-    setMenuPosition({ x: pageX, y: pageY });
-    setActionVisible(true);
-  };
-
-  // ---------------- SEND ----------------
-  const sendMessage = () => {
+  // ---------------- SEND MESSAGE (HTTP ONLY) ----------------
+  const sendMessage = async () => {
     if (!text.trim()) return;
 
     const msg = text;
@@ -161,48 +92,64 @@ export default function ChatScreen({ route, navigation }) {
     setMessages((prev) => [...prev, newMessage]);
     setReplyTo(null);
 
-    ws.current?.send(
-      JSON.stringify({
-        text: msg,
-        receiver_id: otherUserId,
-        conversation_id: conversationId,
-        sender_id: currentUserId,
-      })
-    );
+    try {
+      const token = await AsyncStorage.getItem("access_token");
+
+      await fetch("http://192.168.1.194:8000/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: msg,
+          receiver_id: otherUserId,
+          conversation_id: conversationId,
+        }),
+      });
+    } catch (err) {
+      console.log("SEND MESSAGE ERROR:", err);
+      Alert.alert("Error", "Message failed to send.");
+    }
   };
 
-  // ---------------- WEBSOCKET ----------------
-  useEffect(() => {
-    const connect = async () => {
+  // ---------------- DELETE ----------------
+  const handleDeleteMessage = async (message) => {
+    if (!message?._id) return;
+
+    try {
       const token = await AsyncStorage.getItem("access_token");
-      if (!token) return;
 
-      const decoded = jwtDecode(token);
+      const previousMessages = messages;
 
-      const socket = new WebSocket(
-        `ws://192.168.1.194:8000/ws/${decoded.sub}`
+      setMessages((prev) =>
+        prev.filter((m) => m._id !== message._id)
       );
 
-      ws.current = socket;
+      const res = await fetch(
+        `http://192.168.1.194:8000/messages/${message._id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-      socket.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
+      if (!res.ok) {
+        setMessages(previousMessages);
+        Alert.alert("Error", "Could not delete message.");
+      }
+    } catch (err) {
+      console.log("DELETE ERROR:", err);
+    }
+  };
 
-        const newMessage = {
-          _id: Date.now().toString(),
-          text: msg.text || msg,
-          sender_id: msg.sender_id,
-          created_at: new Date().toISOString(),
-        };
-
-        setMessages((prev) => [...prev, newMessage]);
-      };
-    };
-
-    connect();
-
-    return () => ws.current?.close();
-  }, []);
+  // ---------------- MENU ----------------
+  const openMessageActions = (message) => {
+    setSelectedMessage(message);
+    setActionVisible(true);
+  };
 
   // ---------------- RENDER ----------------
   const renderItem = ({ item }) => {
@@ -210,7 +157,7 @@ export default function ChatScreen({ route, navigation }) {
 
     return (
       <TouchableOpacity
-        onLongPress={(e) => openMessageActions(item, e)}
+        onLongPress={() => openMessageActions(item)}
         style={{
           alignSelf: isMe ? "flex-end" : "flex-start",
           backgroundColor: isMe ? "#111" : "#fff",
@@ -220,20 +167,6 @@ export default function ChatScreen({ route, navigation }) {
           maxWidth: "80%",
         }}
       >
-        {item.replyTo && (
-          <View
-            style={{
-              backgroundColor: "#eee",
-              padding: 6,
-              borderRadius: 8,
-              marginBottom: 6,
-            }}
-          >
-            <Text style={{ fontSize: 11 }}>Replying to:</Text>
-            <Text numberOfLines={1}>{item.replyTo.text}</Text>
-          </View>
-        )}
-
         <Text style={{ color: isMe ? "#fff" : "#000" }}>
           {item.text}
         </Text>
@@ -241,178 +174,91 @@ export default function ChatScreen({ route, navigation }) {
     );
   };
 
-  // ---------------- UI ----------------
-return (
-  <SafeAreaView style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      {/* BACK BUTTON */}
-      <TouchableOpacity
-        onPress={() => navigation.goBack()}
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 15,
-          backgroundColor: "rgba(255,255,255,0.25)",
-          paddingVertical: 8,
-          paddingHorizontal: 12,
-          borderRadius: 14,
-          zIndex: 999,
-        }}
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <Text style={{ fontSize: 16, fontWeight: "600" }}>←</Text>
-      </TouchableOpacity>
-
-      {/* TITLE */}
-      <Text
-        style={{
-          fontSize: 18,
-          fontWeight: "bold",
-          textAlign: "center",
-          marginTop: 0,
-          marginBottom: 10,
-        }}
-      >
-       {listingTitle || t.chat}
-      </Text>
-
-      {/* MESSAGES */}
-      <FlatList
-        data={messages}
-        keyExtractor={(item) => item._id}
-        renderItem={renderItem}
-        contentContainerStyle={{
-          paddingHorizontal: 12,
-          paddingTop: 10,
-          paddingBottom: 10,
-        }}
-      />
-
-      {/* REPLY BAR */}
-      {replyTo && (
-        <View
+        {/* BACK BUTTON */}
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
           style={{
-            padding: 8,
-            backgroundColor: "#eee",
-            marginHorizontal: 10,
-            borderRadius: 10,
+            position: "absolute",
+            top: 0,
+            left: 15,
+            backgroundColor: "rgba(255,255,255,0.25)",
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 14,
+            zIndex: 999,
           }}
         >
-          <Text>Replying to: {replyTo.text}</Text>
+          <Text style={{ fontSize: 16, fontWeight: "600" }}>←</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setReplyTo(null)}>
-            <Text style={{ color: "red", marginTop: 4 }}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* INPUT */}
-      <View
-        style={{
-          flexDirection: "row",
-          padding: 10,
-          backgroundColor: "#fff",
-          alignItems: "center",
-        }}
-      >
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          placeholder="Message..."
+        {/* TITLE */}
+        <Text
           style={{
-            flex: 1,
-            backgroundColor: "#f2f3f5",
-            padding: 10,
-            borderRadius: 20,
+            fontSize: 18,
+            fontWeight: "bold",
+            textAlign: "center",
+            marginBottom: 10,
           }}
+        >
+          {listingTitle || "Discussion"}
+        </Text>
+
+        {/* MESSAGES */}
+        <FlatList
+          data={messages}
+          keyExtractor={(item) => item._id}
+          renderItem={renderItem}
         />
 
-        <TouchableOpacity
-          onPress={sendMessage}
+        {/* INPUT */}
+        <View
           style={{
-            marginLeft: 10,
-            backgroundColor: "#111",
-            paddingVertical: 10,
-            paddingHorizontal: 14,
-            borderRadius: 20,
+            flexDirection: "row",
+            padding: 10,
+            backgroundColor: "#fff",
           }}
         >
-        <Text style={{ color: "#fff" }}>{t.send}</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
-
-    {/* MESSAGE ACTION MODAL */}
-    {actionVisible && selectedMessage && (
-      <Modal transparent animationType="fade">
-        <Pressable
-          onPress={() => {
-            setActionVisible(false);
-            setSelectedMessage(null);
-          }}
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.3)",
-          }}
-        >
-          <View
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder="Message..."
             style={{
-              position: "absolute",
-              top: Math.max(menuPosition.y - 100, 60),
-              left: Math.max(menuPosition.x - 80, 20),
-              backgroundColor: "#fff",
-              borderRadius: 10,
-              width: 150,
-              overflow: "hidden",
+              flex: 1,
+              backgroundColor: "#f2f3f5",
+              padding: 10,
+              borderRadius: 20,
+            }}
+          />
+
+          <TouchableOpacity
+            onPress={sendMessage}
+            style={{
+              marginLeft: 10,
+              backgroundColor: "#111",
+              padding: 10,
+              borderRadius: 20,
             }}
           >
-            <TouchableOpacity
-              onPress={async () => {
-                try {
-                  await Clipboard.setStringAsync(
-                    selectedMessage.text || ""
-                  );
-                  Alert.alert("Copied", "Message copied");
-                } catch (err) {
-                  Alert.alert("Error", "Could not copy");
-                }
-                setActionVisible(false);
-                setSelectedMessage(null);
-              }}
-              style={{ padding: 12 }}
-            >
-              <Text>Copy</Text>
-            </TouchableOpacity>
+            <Text style={{ color: "#fff" }}>{t.send}</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
 
-            <TouchableOpacity
-              onPress={() => {
-                setReplyTo(selectedMessage);
-                setActionVisible(false);
-                setSelectedMessage(null);
-              }}
-              style={{ padding: 12 }}
-            >
-              <Text>Reply</Text>
-            </TouchableOpacity>
-
-            {selectedMessage?.sender_id === currentUserId && (
-              <TouchableOpacity
-                onPress={() => {
-                  handleDeleteMessage(selectedMessage);
-                  setActionVisible(false);
-                  setSelectedMessage(null);
-                }}
-                style={{ padding: 12 }}
-              >
-                <Text style={{ color: "red" }}>Delete</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </Pressable>
-      </Modal>
-    )}
-  </SafeAreaView>
-);
+      {/* MODAL */}
+      {actionVisible && selectedMessage && (
+        <Modal transparent>
+          <Pressable
+            onPress={() => setActionVisible(false)}
+            style={{ flex: 1 }}
+          />
+        </Modal>
+      )}
+    </SafeAreaView>
+  );
 }

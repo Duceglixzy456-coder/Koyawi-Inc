@@ -8,7 +8,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "./Context/AuthContext";
-import { LanguageProvider } from "./Context/LanguageContext"; // ✅ FIXED
+import { LanguageProvider } from "./Context/LanguageContext";
+import { SocketProvider } from "./realtime/SocketContext";
 
 import HelpCenterScreen from "./screens/HelpCenterScreen";
 import PolicyCenterHubScreen from "./screens/PolicyCenterHubScreen";
@@ -28,20 +29,27 @@ export default function App() {
       <SafeAreaProvider>
         <LanguageProvider>
           <AuthProvider>
-            <NavigationContainer>
-              <Stack.Navigator screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="Loading" component={LoadingScreen} />
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="Signup" component={SignupScreen} />
-                <Stack.Screen name="MainApp" component={MainApp} />
 
-                <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
-                <Stack.Screen name="PolicyCenter" component={PolicyCenterHubScreen} />
-                <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
-                <Stack.Screen name="TermsPolicies" component={TermsPoliciesScreen} />
-                <Stack.Screen name="CommunityGuidelines" component={CommunityGuidelinesScreen} />
-              </Stack.Navigator>
-            </NavigationContainer>
+            {/* 🔥 SOCKET WRAPPER GOES HERE (inside auth, outside navigation) */}
+            <SocketProvider>
+
+              <NavigationContainer>
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="Loading" component={LoadingScreen} />
+                  <Stack.Screen name="Login" component={LoginScreen} />
+                  <Stack.Screen name="Signup" component={SignupScreen} />
+                  <Stack.Screen name="MainApp" component={MainApp} />
+
+                  <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+                  <Stack.Screen name="PolicyCenter" component={PolicyCenterHubScreen} />
+                  <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+                  <Stack.Screen name="TermsPolicies" component={TermsPoliciesScreen} />
+                  <Stack.Screen name="CommunityGuidelines" component={CommunityGuidelinesScreen} />
+                </Stack.Navigator>
+              </NavigationContainer>
+
+            </SocketProvider>
+
           </AuthProvider>
         </LanguageProvider>
       </SafeAreaProvider>
