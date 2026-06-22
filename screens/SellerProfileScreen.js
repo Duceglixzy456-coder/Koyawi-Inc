@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { jwtDecode } from "jwt-decode";
+import  {jwtDecode } from "jwt-decode";
 import * as ImagePicker from "expo-image-picker";
 import { Alert } from "react-native";
 export default function SellerProfileScreen({ navigation, route }) {
@@ -27,18 +27,28 @@ const [showPhotoOptions, setShowPhotoOptions] = useState(false);
   const [about, setAbout] = useState("No bio yet");
   const [distance] = useState("5 miles radius • Conakry");
 
-  const profileUserId =
-    route?.params?.userId ?? route?.params?.id ?? null;
+  const profileUserId = React.useMemo(() => {
+  return route?.params?.sellerId ??
+         route?.params?.userId ??
+         route?.params?.id ??
+         null;
+}, [route?.params]);
+  useEffect(() => {
+  if (!profileUserId) return;
+  console.log("PROFILE OPENED:", profileUserId);
+}, [profileUserId]);
 
   const profileImage = localProfileImage || user?.profileImage;
 
   useEffect(() => {
-    console.log("📦 PROFILE PARAMS:", route?.params);
-  }, [route?.params]);
+  if (route?.params?.userId) {
+    console.log("PROFILE OPENED FOR:", route.params.userId);
+  }
+}, []);
 
   const fetchSellerListings = async (id) => {
     try {
-      const res = await fetch("http://192.168.1.194:8000/listings");
+      const res = await fetch("http://192.168.1.195:8000/listings");
       const data = await res.json();
       const filtered = data.filter((item) => item.owner_id === id);
       setListings(filtered);
@@ -53,7 +63,7 @@ const [showPhotoOptions, setShowPhotoOptions] = useState(false);
       if (!profileUserId || !token) return;
 
       const res = await fetch(
-        `http://192.168.1.194:8000/users/${profileUserId}`,
+        `http://192.168.1.195:8000/users/${profileUserId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -111,7 +121,7 @@ const [showPhotoOptions, setShowPhotoOptions] = useState(false);
       const token = await AsyncStorage.getItem("access_token");
 
       const res = await fetch(
-        `http://192.168.1.194:8000/follow/status/${profileUserId}`,
+        `http://192.168.1.195:8000/follow/status/${profileUserId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -173,7 +183,7 @@ const pickImage = async (type) => {
       setLocalProfileImage(imageUri);
 
       await fetch(
-        `http://192.168.1.194:8000/users/${profileUserId}/profile-image`,
+        `http://192.168.1.195:8000/users/${profileUserId}/profile-image`,
         {
           method: "PUT",
           headers: {
@@ -196,7 +206,7 @@ const pickImage = async (type) => {
       );
 
       await fetch(
-        `http://192.168.1.194:8000/users/${profileUserId}/cover-image`,
+        `http://192.168.1.195:8000/users/${profileUserId}/cover-image`,
         {
           method: "PUT",
           headers: {
@@ -221,8 +231,8 @@ const pickImage = async (type) => {
       const token = await AsyncStorage.getItem("access_token");
 
       const url = isFollowing
-        ? `http://192.168.1.194:8000/unfollow/${profileUserId}`
-        : `http://192.168.1.194:8000/follow/${profileUserId}`;
+        ? `http://192.168.1.195:8000/unfollow/${profileUserId}`
+        : `http://192.168.1.195:8000/follow/${profileUserId}`;
 
       await fetch(url, {
         method: isFollowing ? "DELETE" : "POST",
@@ -340,28 +350,30 @@ const pickImage = async (type) => {
   );
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
-        <View style={styles.coverPhoto}>
-<View style={styles.coverPhoto}>
-  {user?.coverImage ? (
-    <Image
-      source={{ uri: user.coverImage }}
-      style={styles.coverImage}
-    />
-  ) : (
-    <TouchableOpacity
-      style={styles.emptyCover}
-      onPress={openImageOptions}
-      activeOpacity={0.7}
-    >
-      <Ionicons name="image-outline" size={30} color="#999" />
-      <Text style={styles.emptyCoverText}>
-        Add cover photo
-      </Text>
-    </TouchableOpacity>
-  )}
-</View>
-</View>
+  <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
+    <View style={styles.coverPhoto}>
+      {user?.coverImage ? (
+        <Image
+          source={{ uri: user.coverImage }}
+          style={styles.coverImage}
+        />
+      ) : (
+        <TouchableOpacity
+          style={styles.emptyCover}
+          onPress={openImageOptions}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name="image-outline"
+            size={30}
+            color="#999"
+          />
+          <Text style={styles.emptyCoverText}>
+            Add cover photo
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
 
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
         <Text style={{ fontSize: 18 }}>←</Text>

@@ -30,7 +30,7 @@ const { login } = useAuth();
     try {
       setLoading(true);
 
-      const res = await fetch("http://192.168.1.194:8000/login", {
+      const res = await fetch("http://192.168.1.195:8000/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -47,9 +47,7 @@ const { login } = useAuth();
         Alert.alert("Login Failed", data.detail || "Invalid credentials");
         return;
       }
-
-      await login(data.access_token);
-      navigation.replace("MainApp");
+await login(data.access_token);
     } catch (err) {
       console.log(err);
       Alert.alert("Error", "Unable to connect to server");

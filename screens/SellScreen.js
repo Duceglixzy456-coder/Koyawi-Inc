@@ -89,7 +89,7 @@ function SellScreen({ navigation }) {
         name: "photo.jpg",
       });
 
-      const res = await fetch("http://192.168.1.194:8000/listings", {
+      const res = await fetch("http://192.168.1.195:8000/listings", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

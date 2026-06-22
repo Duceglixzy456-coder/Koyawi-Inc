@@ -11,7 +11,7 @@ import {
 
 import React, { useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { jwtDecode } from "jwt-decode";
+import {jwtDecode } from "jwt-decode";
 import { RefreshControl } from "react-native";
 
 
@@ -46,7 +46,7 @@ export default function InboxScreen({ navigation }) {
     const userId = decoded.sub;
 
     const res = await fetch(
-      `http://192.168.1.194:8000/conversations/${userId}`,
+      `http://192.168.1.195:8000/conversations/${userId}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -105,7 +105,7 @@ const handleLongPressConversation = (conversationId) => {
             setConversations((prev) => prev); 
 
             const res = await fetch(
-              `http://192.168.1.194:8000/conversations/${conversationId}`,
+              `http://192.168.1.195:8000/conversations/${conversationId}`,
               {
                 method: "DELETE",
                 headers: {

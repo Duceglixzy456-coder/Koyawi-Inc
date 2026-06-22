@@ -11,55 +11,49 @@ export const SocketProvider = ({ children }) => {
   const listenersRef = useRef([]);
   const [connected, setConnected] = useState(false);
 
-  const { token } = useAuth();
+const { token, loading } = useAuth();
 
-  useEffect(() => {
-    if (!token) {
-      socketRef.current?.close();
-      socketRef.current = null;
-      setConnected(false);
-      return;
-    }
+useEffect(() => {
+  if (loading) return;
 
-    const decoded = jwtDecode(token);
+  // IMPORTANT: always close before reconnect
+  socketRef.current?.close();
+  socketRef.current = null;
 
-    // prevent duplicates
-    if (socketRef.current?.readyState === WebSocket.OPEN) return;
+  if (!token) {
+    setConnected(false);
+    console.log("NO TOKEN → WS OFF");
+    return;
+  }
 
-    const socket = new WebSocket(
-      `ws://192.168.1.194:8000/ws/${decoded.sub}`
-    );
+  const decoded = jwtDecode(token);
+  const userId = decoded.sub;
 
-    socketRef.current = socket;
+  const socket = new WebSocket(
+    `ws://192.168.1.195:8000/ws/${userId}`
+  );
 
-    socket.onopen = () => {
-      console.log("WS CONNECTED");
-      setConnected(true);
-    };
+  socketRef.current = socket;
 
-    socket.onclose = () => {
-      console.log("WS CLOSED");
-      socketRef.current = null;
-      setConnected(false);
-    };
+  socket.onopen = () => {
+    console.log("WS CONNECTED");
+    setConnected(true);
+  };
 
-    socket.onerror = (e) => {
-      console.log("WS ERROR", e.message);
-    };
+  socket.onclose = () => {
+    console.log("WS CLOSED");
+    setConnected(false);
+    socketRef.current = null;
+  };
 
-    socket.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        listenersRef.current.forEach((fn) => fn(msg));
-      } catch (err) {
-        console.log("WS PARSE ERROR", err);
-      }
-    };
+  socket.onerror = (e) => {
+    console.log("WS ERROR", e.message);
+  };
 
-    return () => {
-      socket.close();
-    };
-  }, [token]);
+  return () => {
+    socket.close();
+  };
+}, [token, loading]);
 
   const sendMessage = (payload) => {
     if (socketRef.current?.readyState !== WebSocket.OPEN) return;

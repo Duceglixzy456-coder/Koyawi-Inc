@@ -9,7 +9,7 @@ import {
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { jwtDecode } from "jwt-decode";
+import  {jwtDecode } from "jwt-decode";
 import { Colors } from "../theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -42,7 +42,7 @@ export default function HomeScreen({ navigation }) {
 
       const isSaved = savedMap?.[listingId];
 
-      const url = `http://192.168.1.194:8000/save/${listingId}`;
+      const url = `http://192.168.1.195:8000/save/${listingId}`;
       const method = isSaved ? "DELETE" : "POST";
 
       const res = await fetch(url, {
@@ -64,7 +64,7 @@ export default function HomeScreen({ navigation }) {
   // ---------------- FETCH ----------------
   const fetchListings = async () => {
     try {
-      const res = await fetch("http://192.168.1.194:8000/listings");
+      const res = await fetch("http://192.168.1.195:8000/listings");
       const data = await res.json();
       setListings(data || []);
     } catch (err) {

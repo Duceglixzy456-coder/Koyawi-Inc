@@ -49,7 +49,7 @@ const [confirmPassword, setConfirmPassword] = useState("");
   }
 
   try {
-    const res = await fetch("http://192.168.1.194:8000/register", {
+    const res = await fetch("http://192.168.1.195:8000/register", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

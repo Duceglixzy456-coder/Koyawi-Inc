@@ -7,7 +7,8 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import { jwtDecode } from "jwt-decode";
+import { useAuth } from "../Context/AuthContext";
+import {jwtDecode}from "jwt-decode";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { translations } from "../utils/translations";
@@ -36,10 +37,12 @@ function Section({ title, children }) {
 
 export default function ProfileScreen({ navigation }) {
 const { language, toggleLanguage } = useLanguage();
+const { logout } = useAuth();
+
 const t = translations[language];
 const getCurrentUserId = async () => {
   try {
-    const token = await AsyncStorage.getItem("token");
+    const token = await AsyncStorage.getItem("access_token")
 
     if (!token) return null;
 
@@ -51,23 +54,9 @@ const getCurrentUserId = async () => {
     return null;
   }
 };
-  const handleLogout = () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await AsyncStorage.removeItem("token");
-            navigation.replace("Login");
-          } catch (err) {
-            console.log("Logout error:", err);
-          }
-        },
-      },
-    ]);
-  };
+const handleLogout = async () => {
+  await logout();
+};
 
   const handleDeactivate = () => {
     Alert.alert(
@@ -170,7 +159,8 @@ const getCurrentUserId = async () => {
 
       <TouchableOpacity
         style={styles.logout}
-        onPress={handleLogout}
+       onPress={handleLogout}
+
       >
         <Text style={styles.logoutText}>{t.logout}</Text>
       </TouchableOpacity>

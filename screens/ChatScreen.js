@@ -13,21 +13,24 @@ import {
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import  jwtDecode  from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useLanguage } from "../Context/LanguageContext";
 import { translations } from "../utils/translations";
+import { useAuth } from "../Context/AuthContext";
 
 export default function ChatScreen({ route, navigation }) {
   const conversationId = route?.params?.conversationId;
   const otherUserId = route?.params?.otherUserId;
   const listingTitle = route?.params?.listingTitle;
 
+  const { token } = useAuth();
+
+  const currentUserId = token ? jwtDecode(token).sub : null;
+
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
-  const [currentUserId, setCurrentUserId] = useState(null);
-
   const [replyTo, setReplyTo] = useState(null);
 
   const [actionVisible, setActionVisible] = useState(false);
@@ -36,17 +39,11 @@ export default function ChatScreen({ route, navigation }) {
   const { language } = useLanguage();
   const t = translations[language];
 
-  // ---------------- USER ----------------
+  // ---------------- CHECK PARAMS ----------------
   useEffect(() => {
-    const loadUser = async () => {
-      const token = await AsyncStorage.getItem("access_token");
-      if (!token) return;
-
-      const decoded = jwtDecode(token);
-      setCurrentUserId(decoded.sub);
-    };
-
-    loadUser();
+    if (!conversationId || !otherUserId) {
+      console.log("CHAT MISSING PARAMS:", route.params);
+    }
   }, []);
 
   // ---------------- LOAD MESSAGES ----------------
@@ -56,7 +53,7 @@ export default function ChatScreen({ route, navigation }) {
 
       try {
         const res = await fetch(
-          `http://192.168.1.194:8000/messages/${conversationId}`
+          `http://192.168.1.195:8000/messages/${conversationId}`
         );
 
         const data = await res.json();
@@ -74,9 +71,14 @@ export default function ChatScreen({ route, navigation }) {
     loadMessages();
   }, [conversationId]);
 
-  // ---------------- SEND MESSAGE (HTTP ONLY) ----------------
+  // ---------------- SEND MESSAGE ----------------
   const sendMessage = async () => {
     if (!text.trim()) return;
+
+    if (!token) {
+      Alert.alert("Error", "You are not logged in");
+      return;
+    }
 
     const msg = text;
     setText("");
@@ -93,27 +95,37 @@ export default function ChatScreen({ route, navigation }) {
     setReplyTo(null);
 
     try {
-      const token = await AsyncStorage.getItem("access_token");
+      const res = await fetch(
+        "http://192.168.1.195:8000/messages",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            text: msg,
+            receiver_id: otherUserId,
+            conversation_id: conversationId,
+          }),
+        }
+      );
 
-      await fetch("http://192.168.1.194:8000/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          text: msg,
-          receiver_id: otherUserId,
-          conversation_id: conversationId,
-        }),
-      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        console.log("SEND FAILED:", data);
+        Alert.alert("Error", "Message failed to send");
+      } else {
+        console.log("MESSAGE SENT OK:", data);
+      }
     } catch (err) {
       console.log("SEND MESSAGE ERROR:", err);
-      Alert.alert("Error", "Message failed to send.");
+      Alert.alert("Error", "Network error");
     }
   };
 
-  // ---------------- DELETE ----------------
+  // ---------------- DELETE MESSAGE ----------------
   const handleDeleteMessage = async (message) => {
     if (!message?._id) return;
 
@@ -127,7 +139,7 @@ export default function ChatScreen({ route, navigation }) {
       );
 
       const res = await fetch(
-        `http://192.168.1.194:8000/messages/${message._id}`,
+        `http://192.168.1.195:8000/messages/${message._id}`,
         {
           method: "DELETE",
           headers: {
@@ -151,9 +163,10 @@ export default function ChatScreen({ route, navigation }) {
     setActionVisible(true);
   };
 
-  // ---------------- RENDER ----------------
+  // ---------------- RENDER MESSAGE ----------------
   const renderItem = ({ item }) => {
-    const isMe = item.sender_id === currentUserId;
+    const isMe =
+      String(item.sender_id) === String(currentUserId);
 
     return (
       <TouchableOpacity
@@ -180,33 +193,30 @@ export default function ChatScreen({ route, navigation }) {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* BACK BUTTON */}
+        {/* BACK */}
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={{
             position: "absolute",
             top: 0,
             left: 15,
-            backgroundColor: "rgba(255,255,255,0.25)",
-            paddingVertical: 8,
-            paddingHorizontal: 12,
-            borderRadius: 14,
+            padding: 10,
             zIndex: 999,
           }}
         >
-          <Text style={{ fontSize: 16, fontWeight: "600" }}>←</Text>
+          <Text style={{ fontSize: 18 }}>←</Text>
         </TouchableOpacity>
 
         {/* TITLE */}
         <Text
           style={{
+            textAlign: "center",
             fontSize: 18,
             fontWeight: "bold",
-            textAlign: "center",
-            marginBottom: 10,
+            marginVertical: 10,
           }}
         >
-          {listingTitle || "Discussion"}
+          {listingTitle || "Chat"}
         </Text>
 
         {/* MESSAGES */}
@@ -245,7 +255,9 @@ export default function ChatScreen({ route, navigation }) {
               borderRadius: 20,
             }}
           >
-            <Text style={{ color: "#fff" }}>{t.send}</Text>
+            <Text style={{ color: "#fff" }}>
+              {t.send}
+            </Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

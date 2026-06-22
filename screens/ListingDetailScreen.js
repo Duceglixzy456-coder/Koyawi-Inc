@@ -9,7 +9,7 @@ import {
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import  jwtDecode  from "jwt-decode";
+const {jwtDecode } = require("jwt-decode");
 import ScreenHeader from "../components/ScreenHeader";
 
 export default function ListingDetailScreen({ route, navigation }) {
@@ -29,58 +29,72 @@ export default function ListingDetailScreen({ route, navigation }) {
   }, []);
 
   const createConversation = async () => {
-    try {
-      const token = await AsyncStorage.getItem("access_token");
-      if (!token) return;
+  try {
+    console.log("MESSAGE SELLER CLICKED");
 
-      const decoded = jwtDecode(token);
-      const buyerId = decoded.sub;
+    const token = await AsyncStorage.getItem("access_token");
 
-      const sellerId = listing?.owner_id;
-
-      if (!sellerId) return;
-
-      const response = await fetch(
-        "http://192.168.1.194:8000/conversations",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            seller_id: sellerId,
-            listing_id: listing._id,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      navigation.navigate("Chat", {
-        conversationId: data.conversation_id,
-      });
-    } catch (err) {
-      console.log("CONVERSATION ERROR:", err);
+    if (!token) {
+      console.log("NO TOKEN FOUND");
+      return;
     }
-  };
 
-  const goToSellerProfile = () => {
     const sellerId = listing?.owner_id;
 
-    if (!sellerId) return;
+    if (!sellerId) {
+      console.log("NO SELLER ID");
+      return;
+    }
 
-    navigation.navigate("SellerProfile", {
-      userId: sellerId,
+    console.log("SENDING REQUEST:", {
+      seller_id: sellerId,
+      listing_id: listing._id,
     });
-  };
+
+    const response = await fetch(
+      "http://192.168.1.195:8000/conversations",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          seller_id: sellerId,
+          listing_id: listing._id,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    console.log("CONVERSATION RESPONSE:", data);
+
+    if (!response.ok) {
+      console.log("SERVER ERROR:", data);
+      return;
+    }
+
+    if (!data?.conversation_id) {
+      console.log("NO CONVERSATION ID RETURNED");
+      return;
+    }
+
+    navigation.navigate("Chat", {
+      conversationId: data.conversation_id,
+      otherUserId: sellerId, // optional but usually useful
+    });
+  } catch (err) {
+    console.log("CONVERSATION ERROR:", err);
+  }
+};
 
   const deleteListing = async () => {
     try {
       const token = await AsyncStorage.getItem("access_token");
 
       await fetch(
-        `http://192.168.1.194:8000/listings/${listing._id}`,
+        `http://192.168.1.195:8000/listings/${listing._id}`,
         {
           method: "DELETE",
           headers: {
@@ -94,7 +108,11 @@ export default function ListingDetailScreen({ route, navigation }) {
       console.log("DELETE ERROR:", err);
     }
   };
-
+const goToSellerProfile = () => {
+  navigation.navigate("SellerProfile", {
+    sellerId: listing.owner_id,
+  });
+};
   return (
     <View style={{ flex: 1, backgroundColor: "#f4f5f7" }}>
       
