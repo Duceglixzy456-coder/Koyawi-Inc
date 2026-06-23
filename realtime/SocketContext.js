@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { jwtDecode } from "jwt-decode";
 import { useAuth } from "../Context/AuthContext";
 
@@ -11,49 +17,59 @@ export const SocketProvider = ({ children }) => {
   const listenersRef = useRef([]);
   const [connected, setConnected] = useState(false);
 
-const { token, loading } = useAuth();
+  const { token, loading } = useAuth();
 
-useEffect(() => {
-  if (loading) return;
+  useEffect(() => {
+    if (loading) return;
 
-  // IMPORTANT: always close before reconnect
-  socketRef.current?.close();
-  socketRef.current = null;
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+    }
 
-  if (!token) {
-    setConnected(false);
-    console.log("NO TOKEN → WS OFF");
-    return;
-  }
+    if (!token) {
+      setConnected(false);
+      console.log("NO TOKEN → WS OFF");
+      return;
+    }
 
-  const decoded = jwtDecode(token);
-  const userId = decoded.sub;
+    let isActive = true;
 
-  const socket = new WebSocket(
-    `ws://192.168.1.195:8000/ws/${userId}`
-  );
+    const decoded = jwtDecode(token);
+    const userId = decoded.sub;
 
-  socketRef.current = socket;
+    const socket = new WebSocket(
+      `ws://192.168.1.195:8000/ws/${userId}`
+    );
 
-  socket.onopen = () => {
-    console.log("WS CONNECTED");
-    setConnected(true);
-  };
+    socketRef.current = socket;
 
-  socket.onclose = () => {
-    console.log("WS CLOSED");
-    setConnected(false);
-    socketRef.current = null;
-  };
+    socket.onopen = () => {
+      if (!isActive) return;
+      console.log("WS CONNECTED");
+      setConnected(true);
+    };
 
-  socket.onerror = (e) => {
-    console.log("WS ERROR", e.message);
-  };
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      listenersRef.current.forEach((fn) => fn(data));
+    };
 
-  return () => {
-    socket.close();
-  };
-}, [token, loading]);
+    socket.onclose = () => {
+      console.log("WS CLOSED");
+      setConnected(false);
+      socketRef.current = null;
+    };
+
+    socket.onerror = (e) => {
+      console.log("WS ERROR", e.message);
+    };
+
+    return () => {
+      isActive = false;
+      socket.close();
+    };
+  }, [token, loading]);
 
   const sendMessage = (payload) => {
     if (socketRef.current?.readyState !== WebSocket.OPEN) return;
@@ -70,7 +86,11 @@ useEffect(() => {
 
   return (
     <SocketContext.Provider
-      value={{ connected, sendMessage, addMessageListener }}
+      value={{
+        connected,
+        sendMessage,
+        addMessageListener,
+      }}
     >
       {children}
     </SocketContext.Provider>

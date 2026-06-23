@@ -454,7 +454,7 @@ function ChatScreen({ route }) {
     loadMessages();
   }, []);
 
-  const sendMessage = async (msg) => {
+  const handleSendMessage = async () => {
     const finalText = msg || text;
     if (!finalText) return;
 

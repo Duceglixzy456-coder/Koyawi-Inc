@@ -8,90 +8,72 @@ import {
   ScrollView,
 } from "react-native";
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
-const {jwtDecode } = require("jwt-decode");
 import ScreenHeader from "../components/ScreenHeader";
+import { useAuth } from "../Context/AuthContext";
+import { jwtDecode } from "jwt-decode";
+import { getTokenOrLogout } from "../utils/auth";
 
 export default function ListingDetailScreen({ route, navigation }) {
   const { listing } = route.params;
+
+  const { token } = useAuth();
   const [myUserId, setMyUserId] = React.useState(null);
 
+  // ---------------- GET USER ----------------
   React.useEffect(() => {
-    const loadUser = async () => {
-      const token = await AsyncStorage.getItem("access_token");
-      if (!token) return;
+    if (!token) return;
 
+    try {
       const decoded = jwtDecode(token);
       setMyUserId(decoded.sub);
-    };
+    } catch (err) {
+      console.log("JWT ERROR:", err);
+    }
+  }, [token]);
 
-    loadUser();
-  }, []);
-
+  // ---------------- MESSAGE SELLER ----------------
   const createConversation = async () => {
-  try {
-    console.log("MESSAGE SELLER CLICKED");
+    try {
+      const token = await getTokenOrLogout(navigation);
+      if (!token) return;
 
-    const token = await AsyncStorage.getItem("access_token");
+      const sellerId = listing?.owner_id;
 
-    if (!token) {
-      console.log("NO TOKEN FOUND");
-      return;
+      if (!sellerId) return;
+
+      const response = await fetch(
+        "http://192.168.1.195:8000/conversations",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            seller_id: sellerId,
+            listing_id: listing._id,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) return;
+
+      navigation.navigate("Chat", {
+        conversationId: data.conversation_id,
+        otherUserId: sellerId,
+      });
+    } catch (err) {
+      console.log("CONVERSATION ERROR:", err);
     }
+  };
 
-    const sellerId = listing?.owner_id;
-
-    if (!sellerId) {
-      console.log("NO SELLER ID");
-      return;
-    }
-
-    console.log("SENDING REQUEST:", {
-      seller_id: sellerId,
-      listing_id: listing._id,
-    });
-
-    const response = await fetch(
-      "http://192.168.1.195:8000/conversations",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          seller_id: sellerId,
-          listing_id: listing._id,
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    console.log("CONVERSATION RESPONSE:", data);
-
-    if (!response.ok) {
-      console.log("SERVER ERROR:", data);
-      return;
-    }
-
-    if (!data?.conversation_id) {
-      console.log("NO CONVERSATION ID RETURNED");
-      return;
-    }
-
-    navigation.navigate("Chat", {
-      conversationId: data.conversation_id,
-      otherUserId: sellerId, // optional but usually useful
-    });
-  } catch (err) {
-    console.log("CONVERSATION ERROR:", err);
-  }
-};
-
+  // ---------------- DELETE LISTING ----------------
   const deleteListing = async () => {
     try {
-      const token = await AsyncStorage.getItem("access_token");
+      const token = await getTokenOrLogout(navigation);
+      if (!token) return;
 
       await fetch(
         `http://192.168.1.195:8000/listings/${listing._id}`,
@@ -108,35 +90,24 @@ export default function ListingDetailScreen({ route, navigation }) {
       console.log("DELETE ERROR:", err);
     }
   };
-const goToSellerProfile = () => {
-  navigation.navigate("SellerProfile", {
-    sellerId: listing.owner_id,
-  });
-};
+
+  const goToSellerProfile = () => {
+    navigation.navigate("SellerProfile", {
+      sellerId: listing.owner_id,
+    });
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: "#f4f5f7" }}>
-      
-      {/* HEADER */}
-      <ScreenHeader 
-        title="Listing" 
-        navigation={navigation} 
-      />
+      <ScreenHeader title="Listing" navigation={navigation} />
 
-      {/* CONTENT */}
-      <ScrollView
-        style={{ paddingHorizontal: 16, paddingTop: 10 }}
-        showsVerticalScrollIndicator={false}
-      >
-
+      <ScrollView style={{ paddingHorizontal: 16, paddingTop: 10 }}>
         <Image source={{ uri: listing.image }} style={styles.image} />
 
         <Text style={styles.title}>{listing.title}</Text>
-
         <Text style={styles.price}>${listing.price}</Text>
-
         <Text style={styles.description}>{listing.description}</Text>
 
-        {/* ACTIONS */}
         <TouchableOpacity onPress={createConversation} style={styles.messageBtn}>
           <Text style={styles.messageText}>Message Seller</Text>
         </TouchableOpacity>
@@ -158,68 +129,17 @@ const goToSellerProfile = () => {
 }
 
 const styles = StyleSheet.create({
-  image: {
-    width: "100%",
-    height: 260,
-    borderRadius: 12,
-  },
+  image: { width: "100%", height: 260, borderRadius: 12 },
+  title: { fontSize: 24, fontWeight: "bold", marginTop: 12 },
+  price: { fontSize: 18, marginTop: 6, fontWeight: "600" },
+  description: { marginTop: 10, color: "#555", lineHeight: 20 },
 
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginTop: 12,
-  },
+  messageBtn: { backgroundColor: "#000", padding: 15, borderRadius: 10, marginTop: 20 },
+  messageText: { color: "#fff", textAlign: "center", fontWeight: "bold" },
 
-  price: {
-    fontSize: 18,
-    marginTop: 6,
-    fontWeight: "600",
-  },
+  profileBtn: { backgroundColor: "#fff", padding: 15, borderRadius: 10, marginTop: 12, borderWidth: 1 },
+  profileText: { textAlign: "center", fontWeight: "600" },
 
-  description: {
-    marginTop: 10,
-    color: "#555",
-    lineHeight: 20,
-  },
-
-  messageBtn: {
-    backgroundColor: "#000",
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 20,
-  },
-
-  messageText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "bold",
-  },
-
-  profileBtn: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-
-  profileText: {
-    color: "#111",
-    textAlign: "center",
-    fontWeight: "600",
-  },
-
-  deleteBtn: {
-    backgroundColor: "red",
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 12,
-  },
-
-  deleteText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "bold",
-  },
+  deleteBtn: { backgroundColor: "red", padding: 15, borderRadius: 10, marginTop: 12 },
+  deleteText: { color: "#fff", textAlign: "center", fontWeight: "bold" },
 });

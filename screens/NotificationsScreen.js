@@ -10,8 +10,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { Colors } from "../theme/colors";
+import { getTokenOrLogout } from "../utils/auth";
 
-export default function NotificationsScreen() {
+export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +45,8 @@ export default function NotificationsScreen() {
     try {
       setLoading(true);
 
-      const token = await AsyncStorage.getItem("access_token");
+     const token = await getTokenOrLogout(navigation);
+if (!token) return;
 
       const res = await fetch("http://192.168.1.195:8000/notifications", {
         headers: {

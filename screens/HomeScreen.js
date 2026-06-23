@@ -13,7 +13,8 @@ import  {jwtDecode } from "jwt-decode";
 import { Colors } from "../theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-
+import { useAuth } from "../Context/AuthContext";
+import { getTokenOrLogout } from "../utils/auth";
 export default function HomeScreen({ navigation }) {
   const [search, setSearch] = useState("");
   const [listings, setListings] = useState([]);
@@ -22,7 +23,7 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [savedMap, setSavedMap] = useState({});
-
+ const { token: contextToken } = useAuth();
   // ✅ CATEGORIES (FIXED)
   const categories = [
   "All",
@@ -38,7 +39,8 @@ export default function HomeScreen({ navigation }) {
   // ---------------- SAVE ----------------
   const toggleSave = async (listingId) => {
     try {
-      const token = await AsyncStorage.getItem("access_token");
+     const token = await getTokenOrLogout(navigation);
+if (!token) return;
 
       const isSaved = savedMap?.[listingId];
 
@@ -85,20 +87,19 @@ export default function HomeScreen({ navigation }) {
   };
 
   const openMyProfile = async () => {
-    try {
-      const token = await AsyncStorage.getItem("access_token");
-      if (!token) return;
+  try {
+    const token = await getTokenOrLogout(navigation);
+    if (!token) return;
 
-      const decoded = jwtDecode(token);
+    const decoded = jwtDecode(token);
 
-      navigation.navigate("SellerProfile", {
-        userId: decoded.sub,
-      });
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
+    navigation.navigate("SellerProfile", {
+      userId: decoded.sub,
+    });
+  } catch (err) {
+    console.log(err);
+  }
+};
   // ---------------- FILTERS ----------------
 const applyFilters = (data, sortBy, search, selectedCategory) => {
     let result = [...(data || [])];
@@ -274,7 +275,7 @@ if (selectedCategory !== "All") {
         contentContainerStyle={{ padding: 10 }}
         columnWrapperStyle={{ justifyContent: "space-between" }}
        renderItem={({ item }) => {
-  console.log("FULL LISTING ITEM:", item);
+  
 
   return (
     <TouchableOpacity

@@ -3,7 +3,7 @@ import React from "react";
 
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-
+import SessionExpiredScreen from "./screens/SessionExpiredScreen";
 import { AuthProvider } from "./Context/AuthContext";
 import { LanguageProvider } from "./Context/LanguageContext";
 import { SocketProvider } from "./realtime/SocketContext";

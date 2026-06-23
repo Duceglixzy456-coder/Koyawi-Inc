@@ -13,36 +13,32 @@ import React, { useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {jwtDecode } from "jwt-decode";
 import { RefreshControl } from "react-native";
-
+import { useAuth } from "../Context/AuthContext";
+import { getTokenOrLogout } from "../utils/auth";
 
 export default function InboxScreen({ navigation }) {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
-
+const { token } = useAuth();
   // ================= GET USER =================
   useEffect(() => {
-    const loadUser = async () => {
-      const token = await AsyncStorage.getItem("access_token");
-      if (!token) return;
+  if (!token) return;
 
-      const decoded = jwtDecode(token);
-      setCurrentUserId(decoded.sub);
-    };
-
-    loadUser();
-  }, []);
+  const decoded = jwtDecode(token);
+  setCurrentUserId(decoded.sub);
+}, [token]);
 
   // ================= FETCH INBOX =================
  const fetchInbox = async () => {
   try {
     setLoading(true);
 
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getTokenOrLogout(navigation);
     if (!token) return;
 
-    const decoded = jwtDecode(token);
+    const decoded = jwtDecode(token); // ✅ THIS MUST EXIST HERE
     const userId = decoded.sub;
 
     const res = await fetch(
@@ -94,15 +90,13 @@ const handleLongPressConversation = (conversationId) => {
         style: "destructive",
         onPress: async () => {
           try {
-            const token = await AsyncStorage.getItem("access_token");
+           
 
-            if (!token) {
-              console.log("BLOCKED: No token");
-              return;
-            }
+            const token = await getTokenOrLogout(navigation);
+if (!token) return;
 
             // prevent double deletion spam
-            setConversations((prev) => prev); 
+          
 
             const res = await fetch(
               `http://192.168.1.195:8000/conversations/${conversationId}`,

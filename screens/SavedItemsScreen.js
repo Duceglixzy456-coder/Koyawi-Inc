@@ -7,13 +7,14 @@ import {
   TouchableOpacity,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import { getTokenOrLogout } from "../utils/auth";
 export default function SavedItemsScreen({ navigation }) {
   const [saved, setSaved] = useState([]);
 
   const fetchSaved = async () => {
   try {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getTokenOrLogout(navigation);
+if (!token) return;
 
     const res = await fetch("http://192.168.1.195:8000/saved", {
       headers: {

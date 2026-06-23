@@ -22,7 +22,9 @@ export default function EditListingScreen({ route, navigation }) {
     try {
       setLoading(true);
 
-      const token = await AsyncStorage.getItem("access_token");
+
+     const token = await getTokenOrLogout(navigation);
+if (!token) return;
 
       const res = await fetch(
         `http://192.168.1.195:8000/listings/${listing._id}`,

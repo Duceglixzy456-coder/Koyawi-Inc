@@ -13,12 +13,12 @@ import {
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
-
+import { useAuth } from "../Context/AuthContext";
 import { Colors } from "../theme/colors";
 
 function SellScreen({ navigation }) {
-  const [token, setToken] = useState(null);
-
+  
+const { token } = useAuth();
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
@@ -34,30 +34,22 @@ function SellScreen({ navigation }) {
     "Essentials",
   ];
 
-  useEffect(() => {
-    const loadToken = async () => {
-      const stored = await AsyncStorage.getItem("access_token");
-      setToken(stored);
-    };
-
-    loadToken();
-  }, []);
-
+  
   const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        quality: 1,
-      });
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, // ✅ FIXED
+      allowsEditing: true,
+      quality: 1,
+    });
 
-      if (!result.canceled) {
-        setImage(result.assets[0].uri);
-      }
-    } catch (err) {
-      console.log("IMAGE PICK ERROR:", err);
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
     }
-  };
+  } catch (err) {
+    console.log("IMAGE PICK ERROR:", err);
+  }
+};
 
   const createListing = async () => {
     try {
@@ -79,7 +71,7 @@ function SellScreen({ navigation }) {
       const formData = new FormData();
 
       formData.append("title", title);
-      formData.append("price", price);
+      formData.append("price", cleanPrice);
       formData.append("description", description);
       formData.append("category", category);
 

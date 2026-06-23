@@ -13,7 +13,8 @@ import PolicyCenterHubScreen from "./PolicyCenterHubScreen";
 import CommunityGuidelinesScreen from "./CommunityGuidelinesScreen";
 import TermsPoliciesScreen from "./TermsPoliciesScreen";
 import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
-
+import { getTokenOrLogout } from "../utils/auth";
+import SessionExpiredScreen from "../screens/SessionExpiredScreen";
 const Stack = createNativeStackNavigator();
 
 function AuthStack() {
@@ -34,6 +35,7 @@ function AppStack() {
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       <Stack.Screen name="TermsPolicies" component={TermsPoliciesScreen} />
       <Stack.Screen name="CommunityGuidelines" component={CommunityGuidelinesScreen} />
+    <Stack.Screen name="SessionExpired"component={SessionExpiredScreen}/>
     </Stack.Navigator>
   );
 }

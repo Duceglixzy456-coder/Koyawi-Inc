@@ -1,4 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -12,7 +16,7 @@ import {
   Pressable,
 } from "react-native";
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSocket } from "../realtime/SocketContext";
 import { jwtDecode } from "jwt-decode";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -24,11 +28,12 @@ export default function ChatScreen({ route, navigation }) {
   const conversationId = route?.params?.conversationId;
   const otherUserId = route?.params?.otherUserId;
   const listingTitle = route?.params?.listingTitle;
-
+const { sendMessage, addMessageListener } = useSocket();
   const { token } = useAuth();
 
-  const currentUserId = token ? jwtDecode(token).sub : null;
-
+const currentUserId = token
+  ? jwtDecode(token).sub
+  : null;
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState(null);
@@ -47,116 +52,121 @@ export default function ChatScreen({ route, navigation }) {
   }, []);
 
   // ---------------- LOAD MESSAGES ----------------
-  useEffect(() => {
-    const loadMessages = async () => {
-      if (!conversationId) return;
+const loadMessages = async () => {
+  try {
+    if (!conversationId) return;
 
-      try {
-        const res = await fetch(
-          `http://192.168.1.195:8000/messages/${conversationId}`
-        );
+  
 
-        const data = await res.json();
+if (!token) {
+  Alert.alert("Error", "You are not logged in");
+  return;
+}
 
-        const sorted = data.sort(
-          (a, b) => new Date(a.created_at) - new Date(b.created_at)
-        );
-
-        setMessages(sorted);
-      } catch (err) {
-        console.log("LOAD MESSAGES ERROR:", err);
+    const res = await fetch(
+      `http://192.168.1.195:8000/messages/${conversationId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       }
-    };
+    );
 
-    loadMessages();
-  }, [conversationId]);
+    const data = await res.json();
+
+    const sorted = data.sort(
+      (a, b) => new Date(a.created_at) - new Date(b.created_at)
+    );
+
+    setMessages(sorted);
+  } catch (err) {
+    console.log("LOAD MESSAGES ERROR:", err);
+  }
+};
+
+// trigger load
+useEffect(() => {
+  loadMessages();
+}, [conversationId]);
+
+useEffect(() => {
+  const unsubscribe = addMessageListener((msg) => {
+    if (msg.conversation_id === conversationId) {
+      setMessages((prev) => [...prev, msg]);
+    }
+  });
+
+  return unsubscribe;
+}, [conversationId]);
 
   // ---------------- SEND MESSAGE ----------------
-  const sendMessage = async () => {
-    if (!text.trim()) return;
+ const handleSendMessage = async () => {
+  if (!text.trim()) return;
+
+  const msg = text;
+  setText("");
+
+  const tempMessage = {
+    _id: Date.now().toString(),
+    text: msg,
+    sender_id: currentUserId,
+    created_at: new Date().toISOString(),
+  };
+
+  setMessages((prev) => [...prev, tempMessage]);
+
+  try {
+    if (!token) {
+      Alert.alert("Error", "You are not logged in");
+      return;
+    }
+
+    // use socket (from useSocket hook)
+    sendMessage({
+      text: msg,
+      receiver_id: otherUserId,
+      conversation_id: conversationId,
+      sender_id: currentUserId,
+    });
+
+  } catch (err) {
+    console.log("SEND ERROR:", err);
+  }
+};
+  // ---------------- DELETE MESSAGE ----------------
+  const handleDeleteMessage = async (message) => {
+  if (!message?._id) return;
+
+  try {
+    const previousMessages = messages;
+
+    setMessages((prev) =>
+      prev.filter((m) => m._id !== message._id)
+    );
 
     if (!token) {
       Alert.alert("Error", "You are not logged in");
       return;
     }
 
-    const msg = text;
-    setText("");
-
-    const newMessage = {
-      _id: Date.now().toString(),
-      text: msg,
-      sender_id: currentUserId,
-      created_at: new Date().toISOString(),
-      replyTo: replyTo || null,
-    };
-
-    setMessages((prev) => [...prev, newMessage]);
-    setReplyTo(null);
-
-    try {
-      const res = await fetch(
-        "http://192.168.1.195:8000/messages",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            text: msg,
-            receiver_id: otherUserId,
-            conversation_id: conversationId,
-          }),
-        }
-      );
-
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        console.log("SEND FAILED:", data);
-        Alert.alert("Error", "Message failed to send");
-      } else {
-        console.log("MESSAGE SENT OK:", data);
+    const res = await fetch(
+      `http://192.168.1.195:8000/messages/${message._id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       }
-    } catch (err) {
-      console.log("SEND MESSAGE ERROR:", err);
-      Alert.alert("Error", "Network error");
+    );
+
+    if (!res.ok) {
+      setMessages(previousMessages);
+      Alert.alert("Error", "Could not delete message.");
     }
-  };
-
-  // ---------------- DELETE MESSAGE ----------------
-  const handleDeleteMessage = async (message) => {
-    if (!message?._id) return;
-
-    try {
-      const token = await AsyncStorage.getItem("access_token");
-
-      const previousMessages = messages;
-
-      setMessages((prev) =>
-        prev.filter((m) => m._id !== message._id)
-      );
-
-      const res = await fetch(
-        `http://192.168.1.195:8000/messages/${message._id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!res.ok) {
-        setMessages(previousMessages);
-        Alert.alert("Error", "Could not delete message.");
-      }
-    } catch (err) {
-      console.log("DELETE ERROR:", err);
-    }
-  };
-
+  } catch (err) {
+    console.log("DELETE ERROR:", err);
+  }
+};
   // ---------------- MENU ----------------
   const openMessageActions = (message) => {
     setSelectedMessage(message);
@@ -222,7 +232,7 @@ export default function ChatScreen({ route, navigation }) {
         {/* MESSAGES */}
         <FlatList
           data={messages}
-          keyExtractor={(item) => item._id}
+        keyExtractor={(item, index) => item._id?.toString() || index.toString()}
           renderItem={renderItem}
         />
 
@@ -247,7 +257,7 @@ export default function ChatScreen({ route, navigation }) {
           />
 
           <TouchableOpacity
-            onPress={sendMessage}
+            onPress={handleSendMessage}
             style={{
               marginLeft: 10,
               backgroundColor: "#111",

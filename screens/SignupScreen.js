@@ -8,6 +8,7 @@ import {
   Alert,
 } from "react-native";
 
+
 export default function SignupScreen({ navigation }) {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -36,10 +37,7 @@ const [confirmPassword, setConfirmPassword] = useState("");
   console.log("SIGNUP BUTTON PRESSED");
 
   if (!isValid) {
-    Alert.alert(
-      "Missing Info",
-      "Please complete all fields and accept terms."
-    );
+    Alert.alert("Missing Info", "Please complete all fields and accept terms.");
     return;
   }
 
@@ -55,10 +53,10 @@ const [confirmPassword, setConfirmPassword] = useState("");
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-  full_name: fullName.trim(),
-  phone: phone.trim(),
-  password,
-}),
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        password,
+      }),
     });
 
     const data = await res.json();
@@ -69,6 +67,8 @@ const [confirmPassword, setConfirmPassword] = useState("");
     }
 
     Alert.alert("Success", "Account created!");
+
+    // ✅ CLEAN FLOW
     navigation.replace("Login");
 
   } catch (err) {
@@ -76,7 +76,6 @@ const [confirmPassword, setConfirmPassword] = useState("");
     Alert.alert("Error", "Server connection failed");
   }
 };
-
   return (
     <View style={styles.container}>
 

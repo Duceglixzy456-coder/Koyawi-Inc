@@ -8,11 +8,17 @@ import {
   ScrollView,
   FlatList,
 } from "react-native";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import  {jwtDecode } from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import * as ImagePicker from "expo-image-picker";
 import { Alert } from "react-native";
+import { useAuth } from "../Context/AuthContext";
+import { useLanguage } from "../Context/LanguageContext";
+import { translations } from "../utils/translations";
+import { getTokenOrLogout } from "../utils/auth";
+
 export default function SellerProfileScreen({ navigation, route }) {
   const [user, setUser] = useState(null);
   const [localProfileImage, setLocalProfileImage] = useState(null);
@@ -20,31 +26,30 @@ export default function SellerProfileScreen({ navigation, route }) {
   const [isFollowing, setIsFollowing] = useState(false);
   const [stats, setStats] = useState({ followers: 0, following: 0 });
   const [listings, setListings] = useState([]);
-const [showPhotoOptions, setShowPhotoOptions] = useState(false);
-  // const [imageMode, setImageMode] = useState(null);
-// "profile" | "cover"tabs
   const [activeTab, setActiveTab] = useState("listings");
-  const [about, setAbout] = useState("No bio yet");
-  const [distance] = useState("5 miles radius • Conakry");
+
+const { token } = useAuth();
+  const { language } = useLanguage();
+  const t = translations[language]?.sellerProfile;
+
+  const distance = "5 miles radius • Conakry";
 
   const profileUserId = React.useMemo(() => {
-  return route?.params?.sellerId ??
-         route?.params?.userId ??
-         route?.params?.id ??
-         null;
-}, [route?.params]);
-  useEffect(() => {
-  if (!profileUserId) return;
-  console.log("PROFILE OPENED:", profileUserId);
-}, [profileUserId]);
+    return (
+      route?.params?.sellerId ??
+      route?.params?.userId ??
+      route?.params?.id ??
+      null
+    );
+  }, [route?.params]);
 
   const profileImage = localProfileImage || user?.profileImage;
 
   useEffect(() => {
-  if (route?.params?.userId) {
-    console.log("PROFILE OPENED FOR:", route.params.userId);
-  }
-}, []);
+    if (profileUserId) {
+      console.log("PROFILE OPENED:", profileUserId);
+    }
+  }, [profileUserId]);
 
   const fetchSellerListings = async (id) => {
     try {
@@ -56,71 +61,64 @@ const [showPhotoOptions, setShowPhotoOptions] = useState(false);
       console.log("SELLER LISTINGS ERROR:", err);
     }
   };
+const loadProfile = useCallback(async () => {
+  if (!profileUserId) return;
 
-  const loadProfile = useCallback(async () => {
-    try {
-      const token = await AsyncStorage.getItem("access_token");
-      if (!profileUserId || !token) return;
+  try {
+    const token = await getTokenOrLogout(navigation);
+    if (!token) return;
 
-      const res = await fetch(
-        `http://192.168.1.195:8000/users/${profileUserId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+    const res = await fetch(
+      `http://192.168.1.195:8000/users/${profileUserId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
 
-      const data = await res.json();
-      if (!res.ok) return;
+    const data = await res.json();
 
-      setUser({
+    console.log("SELLER RESPONSE:", data);
+
+    if (!res.ok) return;
+
+    setUser({
   _id: data.userId || data._id || data.id,
-  full_name:
-    data.full_name ||
-    data.fullName ||
-    data.user?.full_name ||
-    data.user?.fullName ||
-    "No Name",
-  city: data.city || data.location || "No Location",
-  profileImage:
-    data.profileImage ||
-    data.profile_image ||
-    data.user?.profileImage ||
-    null,
 
-  coverImage: data.coverImage || null, // ✅ THIS IS REQUIRED
+  full_name:
+    data.fullName ||
+    data.full_name ||
+    data.name ||
+    data.username ||
+    "No Name",
+
+  city: data.city || "No Location",
+  profileImage: data.profileImage || null,
+  coverImage: data.coverImage || null,
+  about: data.about || "",
 });
 
-      fetchSellerListings(profileUserId);
-    } catch (err) {
-      console.log("PROFILE LOAD ERROR:", err);
-    }
-  }, [profileUserId]);
+    fetchSellerListings(profileUserId);
+  } catch (err) {
+    console.log("PROFILE LOAD ERROR:", err);
+  }
+}, [profileUserId, navigation]);
 
-  useEffect(() => {
-    loadProfile();
-  }, [loadProfile]);
-
-  useEffect(() => {
-    const checkOwner = async () => {
-      try {
-        const token = await AsyncStorage.getItem("access_token");
-        if (!token || !profileUserId) return;
-
-        const decoded = jwtDecode(token);
-        setIsOwner(decoded.sub === profileUserId);
-      } catch (err) {
-        console.log("OWNER CHECK ERROR:", err);
-      }
-    };
-
-    checkOwner();
-  }, [profileUserId]);
+useEffect(() => {
+  loadProfile();
+}, [loadProfile]);
+ 
 
   const loadFollowStatus = async () => {
     try {
-      const token = await AsyncStorage.getItem("access_token");
+      const token = await getTokenOrLogout(navigation);
+if (!token) return;
 
-      const res = await fetch(
+console.log("FOLLOW TOKEN:", token);
+console.log("PROFILE USER:", profileUserId);
+console.log("AUTH HEADER:", `Bearer ${token}`);
+      const res = await fetch( 
         `http://192.168.1.195:8000/follow/status/${profileUserId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -143,28 +141,16 @@ const [showPhotoOptions, setShowPhotoOptions] = useState(false);
   useEffect(() => {
     if (profileUserId) loadFollowStatus();
   }, [profileUserId]);
-const openImageOptions = () => {
-  Alert.alert(
-    "Update Image",
-    "Choose what you want to change",
-    [
-      {
-        text: "Profile Photo",
-        onPress: () => pickImage("profile"),
-      },
-      {
-        text: "Cover Photo",
-        onPress: () => pickImage("cover"),
-      },
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-    ],
-    { cancelable: true }
-  );
-};
-const pickImage = async (type) => {
+
+  const openImageOptions = () => {
+    Alert.alert("Update Image", "Choose option", [
+      { text: "Profile Photo", onPress: () => pickImage("profile") },
+      { text: "Cover Photo", onPress: () => pickImage("cover") },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const pickImage = async (type) => {
   try {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -176,9 +162,9 @@ const pickImage = async (type) => {
     if (result.canceled) return;
 
     const imageUri = result.assets[0].uri;
-    const token = await AsyncStorage.getItem("access_token");
+const token = await getTokenOrLogout(navigation);
+if (!token) return;
 
-    // ================= PROFILE IMAGE =================
     if (type === "profile") {
       setLocalProfileImage(imageUri);
 
@@ -194,61 +180,84 @@ const pickImage = async (type) => {
         }
       );
 
-      setUser((prev) =>
-        prev ? { ...prev, profileImage: imageUri } : prev
-      );
+      setUser((prev) => ({
+        ...prev,
+        profileImage: imageUri,
+      }));
     }
 
-    // ================= COVER IMAGE =================
     if (type === "cover") {
-      setUser((prev) =>
-        prev ? { ...prev, coverImage: imageUri } : prev
-      );
+      try {
+        const res = await fetch(
+          `http://192.168.1.195:8000/users/${profileUserId}/cover-image`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ coverImage: imageUri }),
+          }
+        );
 
-      await fetch(
-        `http://192.168.1.195:8000/users/${profileUserId}/cover-image`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ coverImage: imageUri }),
-        }
-      );
+        const data = await res.json();
+
+        setUser((prev) => ({
+          ...prev,
+          coverImage: data.coverImage || imageUri,
+        }));
+      } catch (err) {
+        console.log("COVER UPDATE ERROR:", err);
+      }
     }
-
-    // 🔥 SINGLE REFRESH ONLY (IMPORTANT)
-    await loadProfile();
-
-  } catch (error) {
-    console.log("IMAGE PICK ERROR:", error);
+  } catch (err) {
+    console.log("IMAGE PICK ERROR:", err);
   }
 };
 
-  const toggleFollow = async () => {
-    try {
-      const token = await AsyncStorage.getItem("access_token");
+ const toggleFollow = async () => {
+  try {
+   const token = await getTokenOrLogout(navigation);
+if (!token) return;
 
-      const url = isFollowing
-        ? `http://192.168.1.195:8000/unfollow/${profileUserId}`
-        : `http://192.168.1.195:8000/follow/${profileUserId}`;
+    console.log("FOLLOW BUTTON TOKEN:", token);
 
-      await fetch(url, {
-        method: isFollowing ? "DELETE" : "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      setIsFollowing(!isFollowing);
-    } catch (err) {
-      console.log("Follow toggle error:", err);
+    if (!token) {
+      console.log("NO TOKEN FOUND");
+      return;
     }
-  };
+
+    const url = isFollowing
+      ? `http://192.168.1.195:8000/unfollow/${profileUserId}`
+      : `http://192.168.1.195:8000/follow/${profileUserId}`;
+
+    const res = await fetch(url, {
+      method: isFollowing ? "DELETE" : "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const text = await res.text();
+
+    console.log("FOLLOW STATUS:", res.status, text);
+
+    if (!res.ok) {
+      console.log("FOLLOW FAILED — CHECK BACKEND AUTH");
+      return;
+    }
+
+    setIsFollowing(!isFollowing);
+  } catch (err) {
+    console.log("Follow toggle error:", err);
+  }
+};
 
   if (!profileUserId) {
     return (
       <View style={styles.center}>
-        <Text>No profile ID received</Text>
+        <Text>{t?.noProfileId || "No profile ID received"}</Text>
       </View>
     );
   }
@@ -256,351 +265,335 @@ const pickImage = async (type) => {
   if (!user) {
     return (
       <View style={styles.center}>
-        <Text>Loading profile...</Text>
+        <Text>{t?.loadingProfile || "Loading profile..."}</Text>
       </View>
     );
   }
 
-  const renderListings = () => (
-    listings.length === 0 ? (
-      <Text style={styles.placeholder}>No listings yet</Text>
-    ) : (
-      <FlatList
-        data={listings}
-        keyExtractor={(item) => item._id}
-        numColumns={2}
-        scrollEnabled={false}
-        columnWrapperStyle={{ justifyContent: "space-between" }}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Image source={{ uri: item.image }} style={styles.image} />
-            <Text numberOfLines={1}>{item.title}</Text>
-            <Text>${item.price}</Text>
-          </View>
-        )}
-      />
-    )
-  );
-
-  const renderAbout = () => (
+  const tabLabels = {
+    listings: t?.listings || "Listings",
+    about: t?.about || "About",
+    more: t?.more || "More",
+  };
+  
+ const renderAbout = () => (
   <View style={styles.aboutBox}>
-    <Text style={styles.sectionTitle}>About Seller</Text>
+    <Text style={styles.sectionTitle}>
+      {t?.aboutSeller || "About Seller"}
+    </Text>
 
     <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>Bio</Text>
+      <Text style={styles.infoLabel}>{t?.bio || "Bio"}</Text>
       <Text style={styles.infoValue}>
-        {user.about || "No bio yet"}
+        {user.about || t?.noBio || "No bio yet"}
       </Text>
     </View>
 
     <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>Location</Text>
+      <Text style={styles.infoLabel}>{t?.location || "Location"}</Text>
       <Text style={styles.infoValue}>
         {user.city} • {distance}
       </Text>
     </View>
 
     <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>Seller Rating</Text>
-      <Text style={styles.infoValue}>4.8 / 5.0</Text>
-    </View>
-
-    <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>Response Time</Text>
-      <Text style={styles.infoValue}>
-        Usually responds within 1 hour
+      <Text style={styles.infoLabel}>
+        {t?.activeListings || "Active Listings"}
       </Text>
+      <Text style={styles.infoValue}>{listings.length}</Text>
     </View>
 
     <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>Active Listings</Text>
-      <Text style={styles.infoValue}>
-        {listings.length} Listings
-      </Text>
-    </View>
-
-    <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>Member Since</Text>
+      <Text style={styles.infoLabel}>{t?.memberSince || "Member Since"}</Text>
       <Text style={styles.infoValue}>June 2026</Text>
     </View>
 
     <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>Verification</Text>
-      <Text style={styles.infoValue}>Not Verified</Text>
-    </View>
-
-    <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>Recent Reviews</Text>
+      <Text style={styles.infoLabel}>{t?.verification || "Verification"}</Text>
       <Text style={styles.infoValue}>
-        "Great seller, smooth transaction."
-      </Text>
-      <Text style={styles.infoValue}>
-        "Fast communication."
+        {t?.notVerified || "Not Verified"}
       </Text>
     </View>
   </View>
 );
-  const renderMore = () => (
-    <View style={styles.aboutBox}>
-      <Text style={styles.sectionTitle}>More</Text>
-      <Text style={styles.aboutText}>Report user</Text>
-      <Text style={styles.aboutText}>Share profile</Text>
-      <Text style={styles.aboutText}>Block user</Text>
-    </View>
-  );
 
-  return (
-  <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
-    <View style={styles.coverPhoto}>
-      {user?.coverImage ? (
-        <Image
-          source={{ uri: user.coverImage }}
-          style={styles.coverImage}
-        />
-      ) : (
+return (
+ <FlatList
+  key={activeTab === "listings" ? "grid" : "single"}
+
+    data={listings}
+    keyExtractor={(item) => item._id}
+    numColumns={activeTab === "listings" ? 2 : 1}
+    style={{ flex: 1 }}
+    contentContainerStyle={{
+      alignItems: "center",
+      paddingBottom: 40,
+    }}
+    columnWrapperStyle={
+      activeTab === "listings"
+        ? {
+            justifyContent: "space-between",
+            width: "100%",
+            paddingHorizontal: 10,
+          }
+        : undefined
+    }
+    ListHeaderComponent={() => (
+      <View style={{ width: "100%", alignItems: "center" }}>
+
+        {/* BACK BUTTON */}
         <TouchableOpacity
-          style={styles.emptyCover}
-          onPress={openImageOptions}
-          activeOpacity={0.7}
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
         >
-          <Ionicons
-            name="image-outline"
-            size={30}
-            color="#999"
-          />
-          <Text style={styles.emptyCoverText}>
-            Add cover photo
-          </Text>
+          <Text style={{ fontSize: 18, color: "#111" }}>←</Text>
         </TouchableOpacity>
-      )}
-    </View>
 
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <Text style={{ fontSize: 18 }}>←</Text>
-      </TouchableOpacity>
+        {/* COVER */}
+        <View style={styles.coverPhoto}>
+          {user?.coverImage ? (
+          <Image
+  source={{
+    uri: user?.coverImage
+      ? user.coverImage + "?t=" + Date.now()
+      : "https://via.placeholder.com/600x300",
+  }}
+  style={styles.coverImage}
+/>
+          ) : (
+            <View style={styles.emptyCover}>
+              <Ionicons name="image-outline" size={30} color="#999" />
+              <Text style={styles.emptyCoverText}>
+                {t?.addCoverPhoto || "Add cover photo"}
+              </Text>
+            </View>
+          )}
 
-      <View style={{ position: "relative", marginTop: -60, zIndex: 10 }}>
-  {profileImage ? (
-    <Image source={{ uri: profileImage }} style={styles.avatar} />
-  ) : (
-    <View style={styles.avatarPlaceholder}>
-      <Text>No Image</Text>
-    </View>
-  )}
+          <TouchableOpacity
+            onPress={() => pickImage("cover")}
+            style={styles.cameraIcon}
+          >
+            <Ionicons name="camera" size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
 
-  {/* ✅ ADD THIS BACK */}
-  {isOwner && (
-    <TouchableOpacity
-    onPress={openImageOptions}
-    
-      style={styles.cameraBtn}
-    >
-      <Ionicons name="camera" size={16} color="#fff" />
-    </TouchableOpacity>
-  )}
-</View>
+        {/* PROFILE */}
+        <View style={{ marginTop: -60, alignItems: "center" }}>
+          <View>
+           <Image
+  source={{
+    uri: profileImage
+      ? profileImage + "?t=" + Date.now()
+      : "https://via.placeholder.com/150",
+  }}
+  style={styles.avatar}
+/>
 
-<Text style={styles.name}>{user.full_name}</Text>
+            <TouchableOpacity
+              onPress={() => pickImage("profile")}
+              style={styles.profileCameraIcon}
+            >
+              <Ionicons name="camera" size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
 
-{!isOwner && (
-  <TouchableOpacity onPress={toggleFollow} style={styles.followBtn}>
-    <Text style={styles.followText}>
-      {isFollowing ? "Unfollow" : "Follow"}
-    </Text>
-  </TouchableOpacity>
-)}
+        <Text style={styles.name}>{user.full_name}</Text>
 
-      <View style={styles.statsRow}>
-        <Text>Followers: {stats.followers}</Text>
-        <Text>Following: {stats.following}</Text>
-      </View>
-
-      {/* TABS */}
-      <View style={styles.tabRow}>
-        {["listings", "about", "more"].map((tab) => (
-          <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)}>
-            <Text style={[
-              styles.tabText,
-              activeTab === tab && styles.tabActive
-            ]}>
-              {tab.toUpperCase()}
+        {!isOwner && (
+          <TouchableOpacity onPress={toggleFollow} style={styles.followBtn}>
+            <Text style={styles.followText}>
+              {isFollowing ? t?.unfollow : t?.follow}
             </Text>
           </TouchableOpacity>
-        ))}
+        )}
+
+        {/* TABS */}
+        <View style={styles.tabRow}>
+          {Object.keys(tabLabels).map((tab) => (
+            <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)}>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab && styles.tabActive,
+                ]}
+              >
+                {tabLabels[tab]}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
       </View>
+    )}
 
-      {activeTab === "listings" && renderListings()}
-      {activeTab === "about" && renderAbout()}
-      {activeTab === "more" && renderMore()}
+    renderItem={({ item }) =>
+      activeTab === "listings" ? (
+        <View style={styles.listingCard}>
+          <Image source={{ uri: item.image }} style={styles.listingImage} />
 
-    </ScrollView>
-  );
+          <Text style={styles.listingTitle} numberOfLines={1}>
+            {item.title}
+          </Text>
+
+          <Text style={styles.listingPrice}>${item.price}</Text>
+        </View>
+      ) : null
+    }
+
+    ListFooterComponent={
+      activeTab === "about" ? renderAbout() : null
+    }
+  />
+);
 }
-
+    
 const styles = StyleSheet.create({
   container: {
-    padding: 0,
     backgroundColor: "#F2F2F7",
     alignItems: "center",
   },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-avatar: {
-  width: 120,
-  height: 120,
-  borderRadius: 60,
-  borderWidth: 4,
-  borderColor: "#fff",
-},
-coverPhoto: {
-  width: "100%",
-  height: 180,
-  backgroundColor: "#eee",
-  justifyContent: "center",
-  alignItems: "center",
-  overflow: "hidden",
-},
-coverImage: {
-  width: "100%",
-  height: "180%",
-},
-emptyCover: {
-  flex: 1,
-  justifyContent: "center",
-  alignItems: "center",
-  backgroundColor: "#eee",
-},
-emptyCoverText: {
-  marginTop: 6,
-  color: "#999",
-  fontWeight: "500",
-},
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
+  avatar: {
+    width: 120,
+    height: 120,
     borderRadius: 60,
-    backgroundColor: "#E5E5EA",
+  },
+
+  name: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginTop: 10,
+  },
+
+  followBtn: {
+    backgroundColor: "#111",
+    padding: 10,
+    borderRadius: 20,
+    marginTop: 10,
+  },
+
+  followText: {
+    color: "#fff",
+  },
+
+  tabRow: {
+    flexDirection: "row",
+    marginTop: 20,
+  },
+
+  tabText: {
+    marginHorizontal: 10,
+    color: "#888",
+  },
+
+  tabActive: {
+    color: "#000",
+    fontWeight: "700",
+  },
+
+  aboutBox: {
+    width: "100%",
+    padding: 20,
+    backgroundColor: "#fff",
+    marginTop: 20,
+  },
+
+  infoSection: {
+    marginBottom: 15,
+  },
+
+  infoLabel: {
+    color: "#888",
+    fontSize: 12,
+  },
+
+  infoValue: {
+    fontSize: 15,
+  },
+
+  coverPhoto: {
+    width: "100%",
+    height: 180,
+  },
+
+  coverImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  emptyCover: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
 
-  name: { fontSize: 24, fontWeight: "700", marginTop: 12 },
-
-  followBtn: {
-    marginTop: 12,
-    backgroundColor: "#111",
-    padding: 10,
-    borderRadius: 20,
-  },
-  followText: { color: "#fff" },
-
-  statsRow: {
-    flexDirection: "row",
-    gap: 20,
-    marginTop: 10,
+  emptyCoverText: {
+    color: "#999",
   },
 
- tabRow: {
-  flexDirection: "row",
-  justifyContent: "space-evenly",
-  width: "100%",
-  marginTop: 25,
-  paddingVertical: 16,
-  borderTopWidth: 1,
-  borderBottomWidth: 1,
-  borderColor: "#E5E5EA",
-},
-
-tabText: {
-  fontSize: 17,
-  fontWeight: "700",
-  color: "#8E8E93",
-  paddingBottom: 10,
-},
-
-tabActive: {
-  color: "#111",
-  borderBottomWidth: 3,
-  borderBottomColor: "#111",
-},
-
- aboutBox: {
-  width: "100%",
-  marginTop: 20,
-  padding: 24,
-  backgroundColor: "#fff",
-  borderRadius: 16,
-},
-
-infoSection: {
-  marginTop: 4,
-  paddingBottom: 20,
-  borderBottomWidth: 1,
-  borderBottomColor: "#EFEFEF",
-},
-
-infoLabel: {
-  fontSize: 13,
-  color: "#8E8E93",
-  marginBottom: 12,
-  fontWeight: "600",
-},
-
-infoValue: {
-  fontSize: 15,
-  color: "#111",
-  lineHeight: 22,
-},
-
-aboutText: {
-  marginTop: 5,
-  color: "#555",
-},
-
-location: {
-  marginTop: 8,
-  color: "#8E8E93",
-},
-
-  aboutText: {
-    marginTop: 5,
-    color: "#555",
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-photoMenu: {
-  position: "absolute",
-  top: 180,
-  backgroundColor: "#fff",
-  width: 200,
-  borderRadius: 12,
-  padding: 10,
-  elevation: 5,
-  zIndex: 999,
-},
-
-photoMenuText: {
-  paddingVertical: 10,
-  fontSize: 15,
-  fontWeight: "500",
-},
-  card: {
-    backgroundColor: "#fff",
-    width: "48%",
-    marginTop: 10,
-    borderRadius: 12,
-    padding: 8,
-  },
-
-  image: { width: "100%", height: 120 },
 
   backBtn: {
     position: "absolute",
     top: 50,
     left: 15,
-    zIndex: 10,
+    zIndex: 999,
+    elevation: 10,
+    backgroundColor: "rgba(255,255,255,0.7)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+
+  listingCard: {
+    backgroundColor: "#fff",
+    marginTop: 10,
+    width: "48%",
+    borderRadius: 12,
+    overflow: "hidden",
+    paddingBottom: 10,
+  },
+
+  listingImage: {
+    width: "100%",
+    height: 140,
+  },
+
+  listingTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 6,
+    paddingHorizontal: 6,
+  },
+
+  listingPrice: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#444",
+    paddingHorizontal: 6,
+  },
+
+  cameraIcon: {
+    position: "absolute",
+    right: 10,
+    bottom: 10,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    padding: 6,
+    borderRadius: 20,
+  },
+
+  profileCameraIcon: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    padding: 6,
+    borderRadius: 20,
   },
 });
+    

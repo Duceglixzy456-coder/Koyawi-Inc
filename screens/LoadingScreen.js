@@ -1,45 +1,44 @@
 import React, { useEffect } from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import  {jwtDecode } from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
+import { useAuth } from "../Context/AuthContext";
 
-export default function LoadingScreen({ navigation }) {
-  useEffect(() => {
-    const loadApp = async () => {
-      try {
-        const token = await AsyncStorage.getItem("access_token");
+export default function LoadingScreen() {
+  const { token } = useAuth();
 
-        if (!token) {
-          navigation.replace("Login");
-          return;
-        }
-
-        let decoded;
-        try {
-          decoded = jwtDecode(token);
-        } catch (e) {
-          await AsyncStorage.removeItem("access_token");
-          navigation.replace("Login");
-          return;
-        }
-
-        // ⛔ CHECK EXPIRY
-        if (decoded.exp * 1000 < Date.now()) {
-          await AsyncStorage.removeItem("access_token");
-          navigation.replace("Login");
-          return;
-        }
-
-        navigation.replace("MainApp");
-
-      } catch (err) {
-        console.log("LOADING ERROR:", err);
-        navigation.replace("Login");
+  const validateToken = async () => {
+    try {
+      if (!token) {
+        await AsyncStorage.multiRemove(["access_token", "refresh_token"]);
+        return; // ❌ no navigation
       }
-    };
 
-    loadApp();
-  }, []);
+      let decoded;
+
+      try {
+        decoded = jwtDecode(token);
+      } catch (e) {
+        await AsyncStorage.multiRemove(["access_token", "refresh_token"]);
+        return; // ❌ no navigation
+      }
+
+      // ⛔ CHECK EXPIRY
+      if (!decoded?.exp || decoded.exp * 1000 < Date.now()) {
+        await AsyncStorage.multiRemove(["access_token", "refresh_token"]);
+        return; // ❌ no navigation
+      }
+
+      // valid token → do nothing (RootNavigator handles UI)
+    } catch (err) {
+      console.log("LOADING ERROR:", err);
+      await AsyncStorage.multiRemove(["access_token", "refresh_token"]);
+    }
+  };
+
+  useEffect(() => {
+    validateToken();
+  }, [token]);
 
   return (
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>

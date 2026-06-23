@@ -23,6 +23,45 @@ export const translations = {
     replyingTo: "Replying to:",
     cancel: "Cancel",
     reportProblem: "Report a Problem",
+    logoutConfirmTitle: "Logout",
+logoutConfirmMessage: "Are you sure you want to logout?",
+
+    sellerProfile: {
+      listings: "Listings",
+      about: "About",
+      more: "More",
+
+      aboutSeller: "About Seller",
+      bio: "Bio",
+      location: "Location",
+      sellerRating: "Seller Rating",
+      responseTime: "Response Time",
+      activeListings: "Active Listings",
+      memberSince: "Member Since",
+      verification: "Verification",
+      recentReviews: "Recent Reviews",
+
+      noBio: "No bio yet",
+      noListings: "No listings yet",
+
+      usuallyResponds: "Usually responds within 1 hour",
+      notVerified: "Not Verified",
+
+      reportUser: "Report user",
+      shareProfile: "Share profile",
+      blockUser: "Block user",
+
+      addCoverPhoto: "Add cover photo",
+
+      followers: "Followers",
+      following: "Following",
+
+      follow: "Follow",
+      unfollow: "Unfollow",
+
+      loadingProfile: "Loading profile...",
+      noProfileId: "No profile ID received"
+    },
 
     policy: {
       title: "Policy Center",
@@ -102,81 +141,19 @@ Your data is used to:
 
 3. Data Sharing
 We do NOT sell your personal data.
-We only share data when:
-- Required by law enforcement
-- Required for platform safety/security
-- Necessary for app functionality
+We only share data when required for law, safety, or functionality.
 
 4. Data Storage
-Your data is stored securely using cloud infrastructure and encrypted databases where possible.
+Your data is stored securely using cloud infrastructure.
 
 5. Your Rights
-You may:
-- Access your data
-- Request deletion of your account
-- Update your profile information
-- Disable notifications
+You may access, update, or delete your data.
 
 6. Security
 We implement standard security practices but cannot guarantee absolute protection.
 
 7. Contact
 For privacy concerns, contact KOYAWI Support.`,
-
-    termsText: `KOYAWI Terms & Policies
-
-Last Updated: June 2026
-
-1. Acceptance of Terms
-By using KOYAWI, you agree to follow these Terms & Policies.
-
-2. Marketplace Rules
-You agree NOT to:
-- Post illegal, stolen, or prohibited items
-- Use fake pricing or misleading listings
-- Spam users or manipulate engagement
-- Create fake accounts
-
-3. User Responsibility
-KOYAWI is a peer-to-peer marketplace. Users are responsible for their actions.
-
-4. Prohibited Behavior
-- Fraud or scams
-- Harassment or abuse
-- Exploiting platform bugs
-
-5. Account Termination
-We may suspend accounts that violate rules.
-
-6. Limitation of Liability
-We are not responsible for user transactions or disputes.
-
-7. Changes
-We may update these terms at any time.`,
-communityGuidelinesText: `KOYAWI Community Guidelines
-
-Last Updated: June 2026
-
-1. Respect Others
-Treat all users with respect. Harassment, hate speech, or abuse is not allowed.
-
-2. Honest Listings
-Listings must be accurate. No misleading or fake content.
-
-3. Safety First
-Meet in safe locations. KOYAWI is not responsible for in-person transactions.
-
-4. Spam & Fraud
-Spam or scam behavior will result in removal.
-
-5. Content Rules
-No illegal, harmful, or explicit content allowed.
-
-6. Enforcement
-Violations may lead to removal or bans.
-
-7. Community Integrity
-KOYAWI is built on trust between users.`,
   },
 
   fr: {
@@ -203,6 +180,45 @@ KOYAWI is built on trust between users.`,
     replyingTo: "Répond à :",
     cancel: "Annuler",
     reportProblem: "Signaler un problème",
+    logoutConfirmTitle: "Déconnexion",
+logoutConfirmMessage: "Êtes-vous sûr de vouloir vous déconnecter ?",
+
+    sellerProfile: {
+      listings: "Annonces",
+      about: "À propos",
+      more: "Plus",
+
+      aboutSeller: "À propos du vendeur",
+      bio: "Bio",
+      location: "Localisation",
+      sellerRating: "Évaluation du vendeur",
+      responseTime: "Temps de réponse",
+      activeListings: "Annonces actives",
+      memberSince: "Membre depuis",
+      verification: "Vérification",
+      recentReviews: "Avis récents",
+
+      noBio: "Pas encore de bio",
+      noListings: "Aucune annonce",
+
+      usuallyResponds: "Répond généralement en moins d'une heure",
+      notVerified: "Non vérifié",
+
+      reportUser: "Signaler l'utilisateur",
+      shareProfile: "Partager le profil",
+      blockUser: "Bloquer l'utilisateur",
+
+      addCoverPhoto: "Ajouter une photo de couverture",
+
+      followers: "Abonnés",
+      following: "Abonnements",
+
+      follow: "Suivre",
+      unfollow: "Ne plus suivre",
+
+      loadingProfile: "Chargement du profil...",
+      noProfileId: "Aucun ID de profil reçu"
+    },
 
     policy: {
       title: "Centre des politiques",
@@ -267,75 +283,24 @@ KOYAWI is built on trust between users.`,
 Dernière mise à jour : Juin 2026
 
 1. Informations collectées
-Nous collectons des informations pour fournir une expérience sécurisée :
-- Compte, profil, contenu utilisateur, activité
+Nous collectons des données pour assurer la sécurité et le fonctionnement.
 
-2. Utilisation des données
-- Marketplace, messagerie, sécurité, notifications
+2. Utilisation
+Marketplace, sécurité, notifications.
 
-3. Partage des données
+3. Partage
 Nous ne vendons pas vos données.
 
 4. Stockage
 Données sécurisées.
 
-5. Vos droits
-Accès, suppression, modification.
+5. Droits
+Accès, modification, suppression.
 
 6. Sécurité
-Mesures standards appliquées.
+Mesures standards.
 
 7. Contact
 Support KOYAWI.`,
-
-    termsText: `Conditions et politiques KOYAWI
-
-Dernière mise à jour : Juin 2026
-
-1. Acceptation des conditions
-Vous acceptez les règles KOYAWI.
-
-2. Responsabilités
-Pas de fraude ou contenu illégal.
-
-3. Plateforme
-Nous ne sommes pas responsables des utilisateurs.
-
-4. Sécurité
-Vous protégez votre compte.
-
-5. Suspension
-Comptes peuvent être suspendus.
-
-6. Responsabilité
-Nous ne sommes pas responsables des transactions.
-
-7. Contact
-Support KOYAWI.`,
-
-communityGuidelinesText: `Règles communautaires KOYAWI
-
-Dernière mise à jour : Juin 2026
-
-1. Respect
-Aucun harcèlement.
-
-2. Annonces honnêtes
-Pas de fausses informations.
-
-3. Sécurité
-Transactions prudentes.
-
-4. Spam & fraude
-Interdit.
-
-5. Contenu interdit
-Aucun contenu illégal.
-
-6. Application
-Sanctions possibles.
-
-7. Intégrité
-Confiance entre utilisateurs.`,
-  },
+  }
 };

@@ -1,7 +1,8 @@
 import React, { useEffect } from "react";
-import Tabs from "./Tabs";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+
+// Navigation
+import Tabs from "./Tabs";
 
 // Screens
 import ListingDetailScreen from "./ListingDetailScreen";
@@ -14,47 +15,49 @@ import InboxScreen from "./InboxScreen";
 import ChatScreen from "./ChatScreen";
 import FollowersScreen from "./FollowersScreen";
 
-// ✅ ADD THIS
-
+import { useAuth } from "../Context/AuthContext";
 
 const Stack = createNativeStackNavigator();
 
 export default function MainApp() {
-  useEffect(() => {
-    const checkToken = async () => {
-      try {
-        const token = await AsyncStorage.getItem("access_token");
-        console.log("MAIN APP TOKEN:", token);
-      } catch (err) {
-        console.log("TOKEN CHECK ERROR:", err);
-      }
-    };
+  const { token } = useAuth();
 
-    checkToken();
-  }, []);
+  useEffect(() => {
+    // purely debug (safe)
+    console.log("MAIN APP TOKEN:", token);
+  }, [token]);
 
   return (
-    
-      <Stack.Navigator
-        initialRouteName="Tabs"
-        screenOptions={{ headerShown: false }}
-      >
-        <Stack.Screen name="Tabs" component={Tabs} />
+    <Stack.Navigator
+      initialRouteName="Tabs"
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      {/* Main Tabs */}
+      <Stack.Screen name="Tabs" component={Tabs} />
 
-        <Stack.Screen name="Chat" component={ChatScreen} />
+      {/* Chat Flow */}
+      <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="Inbox" component={InboxScreen} />
 
-        <Stack.Screen name="SavedItems" component={SavedItemsScreen} />
-        <Stack.Screen name="ListingDetailScreen" component={ListingDetailScreen} />
-        <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+      {/* Listings */}
+      <Stack.Screen
+        name="ListingDetailScreen"
+        component={ListingDetailScreen}
+      />
 
-        <Stack.Screen name="SellerProfile" component={SellerProfileScreen} />
+      {/* User / Social */}
+      <Stack.Screen name="SellerProfile" component={SellerProfileScreen} />
+      <Stack.Screen name="FollowersScreen" component={FollowersScreen} />
 
-        <Stack.Screen name="FollowersScreen" component={FollowersScreen} />
+      {/* Account */}
+      <Stack.Screen name="SavedItems" component={SavedItemsScreen} />
+      <Stack.Screen name="Transactions" component={TransactionsScreen} />
+      <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
 
-        <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
-        <Stack.Screen name="Inbox" component={InboxScreen} />
-        <Stack.Screen name="Transactions" component={TransactionsScreen} />
-      </Stack.Navigator>
-    
+      {/* Support */}
+      <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+    </Stack.Navigator>
   );
 }
