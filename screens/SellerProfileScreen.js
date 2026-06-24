@@ -8,7 +8,7 @@ import {
   ScrollView,
   FlatList,
 } from "react-native";
-
+import { api } from "../utils/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { jwtDecode } from "jwt-decode";
@@ -22,28 +22,34 @@ import { getTokenOrLogout } from "../utils/auth";
 export default function SellerProfileScreen({ navigation, route }) {
   const [user, setUser] = useState(null);
   const [localProfileImage, setLocalProfileImage] = useState(null);
-  const [isOwner, setIsOwner] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [stats, setStats] = useState({ followers: 0, following: 0 });
   const [listings, setListings] = useState([]);
   const [activeTab, setActiveTab] = useState("listings");
-
-const { token } = useAuth();
-  const { language } = useLanguage();
-  const t = translations[language]?.sellerProfile;
-
+  const profileImage = localProfileImage || user?.profileImage;
   const distance = "5 miles radius • Conakry";
 
-  const profileUserId = React.useMemo(() => {
-    return (
-      route?.params?.sellerId ??
-      route?.params?.userId ??
-      route?.params?.id ??
-      null
-    );
-  }, [route?.params]);
+const { token } = useAuth();
 
-  const profileImage = localProfileImage || user?.profileImage;
+const { language } = useLanguage();
+const t = translations?.[language]?.sellerProfile ?? {};
+
+const decoded = token ? jwtDecode(token) : null;
+const currentUserId = decoded?.sub;
+
+const profileUserId = React.useMemo(() => {
+  return (
+    route?.params?.sellerId ??
+    route?.params?.userId ??
+    route?.params?.id ??
+    null
+  );
+}, [route?.params]);
+
+const isOwner =
+  !!currentUserId &&
+  !!profileUserId &&
+  currentUserId === profileUserId;
 
   useEffect(() => {
     if (profileUserId) {
@@ -68,14 +74,13 @@ const loadProfile = useCallback(async () => {
     const token = await getTokenOrLogout(navigation);
     if (!token) return;
 
-    const res = await fetch(
-      `http://192.168.1.195:8000/users/${profileUserId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const res = await api(
+  `/users/${profileUserId}`,
+  {},
+  navigation
+);
+
+if (!res) return;
 
     const data = await res.json();
 
@@ -263,19 +268,18 @@ if (!token) return;
   }
 
   if (!user) {
-    return (
-      <View style={styles.center}>
-        <Text>{t?.loadingProfile || "Loading profile..."}</Text>
-      </View>
-    );
-  }
-
-  const tabLabels = {
-    listings: t?.listings || "Listings",
-    about: t?.about || "About",
-    more: t?.more || "More",
-  };
-  
+  return (
+    <View style={styles.center}>
+      <Text>{t?.loadingProfile || "Loading profile..."}</Text>
+    </View>
+  );
+}
+ const tabLabels = {
+  listings: t?.listings || "Listings",
+  about: t?.about || "About",
+  more: t?.more || "More",
+  boost: "Boost",
+};
  const renderAbout = () => (
   <View style={styles.aboutBox}>
     <Text style={styles.sectionTitle}>
@@ -316,17 +320,51 @@ if (!token) return;
     </View>
   </View>
 );
+const renderBoost = () => {
+  return (
+    <View style={styles.boostContainer}>
+      <Text style={styles.boostTitle}>Boost Your Listings</Text>
+
+      {listings.map((item) => (
+        <View key={item._id} style={styles.boostCard}>
+          <Image source={{ uri: item.image }} style={styles.boostImage} />
+
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={1} style={styles.boostItemTitle}>
+              {item.title}
+            </Text>
+
+            <Text style={styles.boostPrice}>
+              ${item.price}
+            </Text>
+
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate("BoostListingDetail", {
+                  listing: item,
+                })
+              }
+              style={styles.boostActionBtn}
+            >
+              <Text style={styles.boostActionText}>
+                Boost This Listing
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+};
 
 return (
- <FlatList
-  key={activeTab === "listings" ? "grid" : "single"}
-
+  <FlatList
+    key={activeTab === "listings" ? "grid" : "single"}
     data={listings}
     keyExtractor={(item) => item._id}
     numColumns={activeTab === "listings" ? 2 : 1}
     style={{ flex: 1 }}
     contentContainerStyle={{
-      alignItems: "center",
       paddingBottom: 40,
     }}
     columnWrapperStyle={
@@ -338,6 +376,7 @@ return (
           }
         : undefined
     }
+
     ListHeaderComponent={() => (
       <View style={{ width: "100%", alignItems: "center" }}>
 
@@ -352,14 +391,12 @@ return (
         {/* COVER */}
         <View style={styles.coverPhoto}>
           {user?.coverImage ? (
-          <Image
-  source={{
-    uri: user?.coverImage
-      ? user.coverImage + "?t=" + Date.now()
-      : "https://via.placeholder.com/600x300",
-  }}
-  style={styles.coverImage}
-/>
+            <Image
+              source={{
+                uri: user.coverImage + "?t=" + Date.now(),
+              }}
+              style={styles.coverImage}
+            />
           ) : (
             <View style={styles.emptyCover}>
               <Ionicons name="image-outline" size={30} color="#999" />
@@ -372,36 +409,39 @@ return (
           <TouchableOpacity
             onPress={() => pickImage("cover")}
             style={styles.cameraIcon}
-          >
-            <Ionicons name="camera" size={18} color="#fff" />
-          </TouchableOpacity>
+          />
         </View>
 
         {/* PROFILE */}
         <View style={{ marginTop: -60, alignItems: "center" }}>
-          <View>
-           <Image
-  source={{
-    uri: profileImage
-      ? profileImage + "?t=" + Date.now()
-      : "https://via.placeholder.com/150",
-  }}
-  style={styles.avatar}
-/>
+          <View style={{ position: "relative" }}>
+            <Image
+              source={{
+                uri: profileImage
+                  ? profileImage + "?t=" + Date.now()
+                  : "https://via.placeholder.com/150",
+              }}
+              style={styles.avatar}
+            />
 
             <TouchableOpacity
               onPress={() => pickImage("profile")}
               style={styles.profileCameraIcon}
-            >
-              <Ionicons name="camera" size={16} color="#fff" />
-            </TouchableOpacity>
+            />
           </View>
         </View>
 
-        <Text style={styles.name}>{user.full_name}</Text>
+        {/* NAME */}
+        <Text style={[styles.name, { textAlign: "center" }]}>
+          {user.full_name}
+        </Text>
 
+        {/* FOLLOW BUTTON */}
         {!isOwner && (
-          <TouchableOpacity onPress={toggleFollow} style={styles.followBtn}>
+          <TouchableOpacity
+            onPress={toggleFollow}
+            style={styles.followBtn}
+          >
             <Text style={styles.followText}>
               {isFollowing ? t?.unfollow : t?.follow}
             </Text>
@@ -410,18 +450,23 @@ return (
 
         {/* TABS */}
         <View style={styles.tabRow}>
-          {Object.keys(tabLabels).map((tab) => (
-            <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)}>
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab && styles.tabActive,
-                ]}
+          {Object.keys(tabLabels)
+            .filter((tab) => !(tab === "boost" && !isOwner))
+            .map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                onPress={() => setActiveTab(tab)}
               >
-                {tabLabels[tab]}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === tab && styles.tabActive,
+                  ]}
+                >
+                  {tabLabels[tab]}
+                </Text>
+              </TouchableOpacity>
+            ))}
         </View>
 
       </View>
@@ -430,28 +475,36 @@ return (
     renderItem={({ item }) =>
       activeTab === "listings" ? (
         <View style={styles.listingCard}>
-          <Image source={{ uri: item.image }} style={styles.listingImage} />
+          <Image
+            source={{ uri: item.image }}
+            style={styles.listingImage}
+          />
 
           <Text style={styles.listingTitle} numberOfLines={1}>
             {item.title}
           </Text>
 
-          <Text style={styles.listingPrice}>${item.price}</Text>
+          <Text style={styles.listingPrice}>
+            ${item.price}
+          </Text>
         </View>
       ) : null
     }
 
     ListFooterComponent={
-      activeTab === "about" ? renderAbout() : null
+      activeTab === "about"
+        ? renderAbout()
+        : activeTab === "boost" && isOwner
+        ? renderBoost()
+        : null
     }
   />
 );
 }
-    
 const styles = StyleSheet.create({
   container: {
     backgroundColor: "#F2F2F7",
-    alignItems: "center",
+    
   },
 
   avatar: {
@@ -467,20 +520,23 @@ const styles = StyleSheet.create({
   },
 
   followBtn: {
-    backgroundColor: "#111",
-    padding: 10,
-    borderRadius: 20,
-    marginTop: 10,
-  },
-
+  backgroundColor: "#111",
+  paddingVertical: 10,
+  paddingHorizontal: 20,
+  borderRadius: 20,
+  marginTop: 10,
+  alignSelf: "center", // 🔥 THIS is the key
+},
   followText: {
     color: "#fff",
   },
 
   tabRow: {
-    flexDirection: "row",
-    marginTop: 20,
-  },
+  flexDirection: "row",
+  justifyContent: "center",
+  width: "100%",
+  marginTop: 20,
+},
 
   tabText: {
     marginHorizontal: 10,
@@ -538,17 +594,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  backBtn: {
-    position: "absolute",
-    top: 50,
-    left: 15,
-    zIndex: 999,
-    elevation: 10,
-    backgroundColor: "rgba(255,255,255,0.7)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
+ backBtn: {
+  position: "absolute",
+  top: 50,
+  left: 15,
+  zIndex: 999,
+  elevation: 10,
+  backgroundColor: "rgba(255,255,255,0.85)",
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  borderRadius: 20,
+},
 
   listingCard: {
     backgroundColor: "#fff",
@@ -588,12 +644,63 @@ const styles = StyleSheet.create({
   },
 
   profileCameraIcon: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 6,
-    borderRadius: 20,
-  },
+  position: "absolute",
+  bottom: 5,
+  right: 5,
+  backgroundColor: "rgba(0,0,0,0.6)",
+  padding: 6,
+  borderRadius: 20,
+},
+
+boostContainer: {
+  width: "100%",
+  padding: 15,
+},
+
+boostTitle: {
+  fontSize: 18,
+  fontWeight: "700",
+  marginBottom: 10,
+},
+
+boostCard: {
+  flexDirection: "row",
+  backgroundColor: "#fff",
+  padding: 10,
+  borderRadius: 10,
+  marginBottom: 10,
+  alignItems: "center",
+},
+
+boostImage: {
+  width: 70,
+  height: 70,
+  borderRadius: 10,
+  marginRight: 10,
+},
+
+boostItemTitle: {
+  fontWeight: "600",
+},
+
+boostPrice: {
+  color: "#555",
+  marginTop: 4,
+},
+
+boostActionBtn: {
+  marginTop: 8,
+  backgroundColor: "#111",
+  paddingVertical: 6,
+  paddingHorizontal: 10,
+  borderRadius: 6,
+  alignSelf: "flex-start",
+},
+
+boostActionText: {
+  color: "#fff",
+  fontSize: 12,
+},
+
 });
-    
+

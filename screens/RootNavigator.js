@@ -7,7 +7,8 @@ import { useAuth } from "../Context/AuthContext";
 import LoginScreen from "./LoginScreen";
 import SignupScreen from "./SignupScreen";
 import MainApp from "./MainApp";
-
+import BoostListingsScreen from "./BoostListingsScreen";
+import BoostListingDetailScreen from "./BoostListingDetailScreen";
 import HelpCenterScreen from "./HelpCenterScreen";
 import PolicyCenterHubScreen from "./PolicyCenterHubScreen";
 import CommunityGuidelinesScreen from "./CommunityGuidelinesScreen";
@@ -35,6 +36,8 @@ function AppStack() {
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       <Stack.Screen name="TermsPolicies" component={TermsPoliciesScreen} />
       <Stack.Screen name="CommunityGuidelines" component={CommunityGuidelinesScreen} />
+      <Stack.Screen name="BoostListings"component={BoostListingsScreen}/>
+      <Stack.Screen name="BoostListingDetail"component={BoostListingDetailScreen}/>
     <Stack.Screen name="SessionExpired"component={SessionExpiredScreen}/>
     </Stack.Navigator>
   );
