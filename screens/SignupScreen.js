@@ -17,7 +17,7 @@ export default function SignupScreen({ navigation }) {
   const [accepted, setAccepted] = useState(false);
 const [acceptTerms, setAcceptTerms] = useState(false);
 const [acceptPrivacy, setAcceptPrivacy] = useState(false);
- 
+ const cities = ["Conakry", "Labé", "Kankan", "Nzérékoré"];
 const [fullName, setFullName] = useState("");
 
 const [confirmPassword, setConfirmPassword] = useState("");
@@ -30,7 +30,8 @@ const [confirmPassword, setConfirmPassword] = useState("");
   password === confirmPassword &&
   fullName.trim().length > 0 &&
   acceptTerms &&
-  acceptPrivacy;
+  acceptPrivacy &&
+  city.length > 0;
 
 
  const signupUser = async () => {
@@ -47,16 +48,17 @@ const [confirmPassword, setConfirmPassword] = useState("");
   }
 
   try {
-    const res = await fetch("http://192.168.1.195:8000/register", {
+    const res = await fetch("http://192.168.1.194:8000/register", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        full_name: fullName.trim(),
-        phone: phone.trim(),
-        password,
-      }),
+  full_name: fullName.trim(),
+  phone: phone.trim(),
+  password,
+  city: city
+}),
     });
 
     const data = await res.json();
@@ -147,6 +149,29 @@ const [confirmPassword, setConfirmPassword] = useState("");
   style={styles.input}
 />
 
+<Text style={{ marginTop: 10, fontWeight: "600" }}>
+  Select City
+</Text>
+
+<View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 10 }}>
+  {cities.map((c) => (
+    <TouchableOpacity
+      key={c}
+      onPress={() => setCity(c)}
+      style={{
+        padding: 10,
+        borderRadius: 8,
+        marginRight: 8,
+        marginBottom: 8,
+        backgroundColor: city === c ? "#2B2B2E" : "#fff",
+      }}
+    >
+      <Text style={{ color: city === c ? "#fff" : "#000" }}>
+        {c}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</View>
 
 
 

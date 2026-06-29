@@ -1,7 +1,7 @@
 // utils/api.js
 import { getTokenOrLogout } from "./auth";
 
-const BASE_URL = "http://192.168.1.195:8000";
+const BASE_URL = "http://192.168.1.194:8000";
 
 export const api = async (endpoint, options = {}, navigation) => {
   const token = await getTokenOrLogout(navigation);

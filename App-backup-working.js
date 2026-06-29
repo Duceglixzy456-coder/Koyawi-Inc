@@ -31,7 +31,7 @@ function LoginScreen({ navigation }) {
 
       console.log("LOGIN START");
 
-      const res = await fetch("http://192.168.1.195:8000/login", {
+      const res = await fetch("http://192.168.1.194:8000/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -162,7 +162,7 @@ function HomeScreen({ navigation, route }) {
   const [search, setSearch] = React.useState("");
 
   React.useEffect(() => {
-    fetch("http://192.168.1.195:8000/listings", {
+    fetch("http://192.168.1.194:8000/listings", {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -264,7 +264,7 @@ function SellScreen({ navigation, route }) {
     try {
       setLoading(true);
 
-      const res = await fetch("http://192.168.1.195:8000/listings", {
+      const res = await fetch("http://192.168.1.194:8000/listings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -390,7 +390,7 @@ function SellScreen({ navigation, route }) {
 function InboxScreen({ navigation }) {
   const [conversations, setConversations] = React.useState([]);
 React.useEffect(() => {
-  fetch("http://192.168.1.195:8000/conversations")
+  fetch("http://192.168.1.194:8000/conversations")
     .then(res => res.json())
     .then(data => setConversations(Array.isArray(data) ? data : []))
     .catch(console.log);
@@ -444,7 +444,7 @@ function ChatScreen({ route }) {
   const [text, setText] = React.useState("");
 
   const loadMessages = () => {
-    fetch(`http://192.168.1.195:8000/${conversationId}`)
+    fetch(`http://192.168.1.194:8000/${conversationId}`)
       .then(res => res.json())
       .then(data => setMessages(Array.isArray(data) ? data : []))
       .catch(console.log);
@@ -458,7 +458,7 @@ function ChatScreen({ route }) {
     const finalText = msg || text;
     if (!finalText) return;
 
-   await fetch("http://192.168.1.195:8000/messages", {
+   await fetch("http://192.168.1.194:8000/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

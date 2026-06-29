@@ -15,26 +15,37 @@ export const AuthProvider = ({ children }) => {
 
   const TOKEN_KEY = "access_token";
 
-  useEffect(() => {
-    const load = async () => {
+ useEffect(() => {
+  const load = async () => {
+    try {
       const stored = await AsyncStorage.getItem(TOKEN_KEY);
-      setToken(stored);
+
+      if (!stored || stored === "null" || stored === "undefined") {
+        setToken(null);
+      } else {
+        setToken(stored);
+      }
+    } catch (err) {
+      console.log("AUTH LOAD ERROR:", err);
+      setToken(null);
+    } finally {
       setLoading(false);
-    };
-
-    load();
-  }, []);
-
-  const login = async (newToken) => {
-    await AsyncStorage.setItem(TOKEN_KEY, newToken);
-    setToken(newToken);
+    }
   };
+
+  load();
+}, []);
+ const login = async (newToken) => {
+  if (!newToken) return;
+
+  await AsyncStorage.setItem(TOKEN_KEY, newToken);
+  setToken(newToken);
+};
 
   const logout = async () => {
-    await AsyncStorage.removeItem(TOKEN_KEY);
-    setToken(null);
-  };
-
+  await AsyncStorage.removeItem(TOKEN_KEY);
+  setToken(null);
+};
   return (
     <AuthContext.Provider value={{ token, login, logout, loading }}>
       {children}

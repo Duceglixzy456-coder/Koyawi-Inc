@@ -1,77 +1,51 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+const BASE_URL = "http://192.168.1.194:8000";
 
-const BASE_URL = "http://192.168.1.195:8000";
-
-/**
- * Get token safely from storage (NO hooks here)
- */
-const getStoredToken = async () => {
-  return await AsyncStorage.getItem("access_token");
-};
-
-/**
- * Refresh token using refresh_token
- */
-const refreshAccessToken = async () => {
+export const api = async (
+  endpoint,
+  token,
+  options = {},
+  navigation
+) => {
   try {
-    const refreshToken = await AsyncStorage.getItem("refresh_token");
-
-    if (!refreshToken) return null;
-
-    const res = await fetch(`${BASE_URL}/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-
-    if (data?.access_token) {
-      await AsyncStorage.setItem("access_token", data.access_token);
-      return data.access_token;
-    }
-
-    return null;
-  } catch (err) {
-    console.log("REFRESH ERROR:", err);
-    return null;
-  }
-};
-
-/**
- * SAFE API FETCH WITH AUTO REFRESH
- */
-export const apiFetch = async (url, options = {}) => {
-  let token = await getStoredToken();
-
-  const makeRequest = (accessToken) =>
-    fetch(`${BASE_URL}${url}`, {
+    const res = await fetch(`${BASE_URL}${endpoint}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
+        Authorization: token ? `Bearer ${token}` : "",
         ...(options.headers || {}),
-        Authorization: accessToken ? `Bearer ${accessToken}` : "",
       },
     });
 
-  let res = await makeRequest(token);
+    // Unauthorized
+    if (res.status === 401) {
+      console.log("TOKEN EXPIRED OR INVALID");
 
-  // TOKEN EXPIRED → REFRESH FLOW
-  if (res.status === 401) {
-    const newToken = await refreshAccessToken();
+      if (navigation) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Login" }],
+        });
+      }
 
-    if (!newToken) {
-      await AsyncStorage.multiRemove([
-        "access_token",
-        "refresh_token",
-      ]);
-      return res;
+      return null;
     }
 
-    res = await makeRequest(newToken);
-  }
+    // Handle empty responses
+    if (res.status === 204) {
+      return null;
+    }
 
-  return res;
+    // Return JSON if available
+    const contentType = res.headers.get("content-type");
+
+    if (contentType?.includes("application/json")) {
+      return await res.json();
+    }
+
+    // Otherwise return plain text
+    return await res.text();
+  } catch (err) {
+    console.log("API ERROR:", err);
+    throw err;
+  }
 };

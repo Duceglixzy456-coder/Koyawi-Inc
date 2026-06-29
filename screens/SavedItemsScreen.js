@@ -16,7 +16,7 @@ export default function SavedItemsScreen({ navigation }) {
     const token = await getTokenOrLogout(navigation);
 if (!token) return;
 
-    const res = await fetch("http://192.168.1.195:8000/saved", {
+    const res = await fetch("http://192.168.1.194:8000/saved", {
       headers: {
         Authorization: `Bearer ${token}`,
       },

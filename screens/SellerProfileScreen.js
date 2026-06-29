@@ -3,7 +3,9 @@ import {
   View,
   Text,
   Image,
+  ActivityIndicator,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   ScrollView,
   FlatList,
@@ -17,10 +19,11 @@ import { Alert } from "react-native";
 import { useAuth } from "../Context/AuthContext";
 import { useLanguage } from "../Context/LanguageContext";
 import { translations } from "../utils/translations";
-import { getTokenOrLogout } from "../utils/auth";
 
 export default function SellerProfileScreen({ navigation, route }) {
   const [user, setUser] = useState(null);
+  const [editingBio, setEditingBio] = useState(false);
+const [bioText, setBioText] = useState(user?.bio || "");
   const [localProfileImage, setLocalProfileImage] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [stats, setStats] = useState({ followers: 0, following: 0 });
@@ -28,7 +31,9 @@ export default function SellerProfileScreen({ navigation, route }) {
   const [activeTab, setActiveTab] = useState("listings");
   const profileImage = localProfileImage || user?.profileImage;
   const distance = "5 miles radius • Conakry";
-
+const memberSince = user?.created_at
+  ? new Date(user.created_at).toLocaleDateString()
+  : "Unknown";
 const { token } = useAuth();
 
 const { language } = useLanguage();
@@ -50,103 +55,131 @@ const isOwner =
   !!currentUserId &&
   !!profileUserId &&
   currentUserId === profileUserId;
+  
 
   useEffect(() => {
-    if (profileUserId) {
-      console.log("PROFILE OPENED:", profileUserId);
-    }
-  }, [profileUserId]);
+  if (!profileUserId || !token) return;
 
-  const fetchSellerListings = async (id) => {
-    try {
-      const res = await fetch("http://192.168.1.195:8000/listings");
-      const data = await res.json();
-      const filtered = data.filter((item) => item.owner_id === id);
-      setListings(filtered);
-    } catch (err) {
-      console.log("SELLER LISTINGS ERROR:", err);
-    }
-  };
-const loadProfile = useCallback(async () => {
-  if (!profileUserId) return;
+  loadProfile();
+}, [profileUserId, token, loadProfile]);
+const getImages = (item) => {
+  if (Array.isArray(item?.images) && item.images.length > 0) return item.images;
+  if (typeof item?.images === "string") return [item.images];
+  if (item?.coverImage) return [item.coverImage];
+  if (item?.image) return [item.image];
+  return [];
+};
 
+const fetchSellerListings = async (id) => {
   try {
-    const token = await getTokenOrLogout(navigation);
-    if (!token) return;
-
-    const res = await api(
-  `/users/${profileUserId}`,
-  {},
-  navigation
-);
-
-if (!res) return;
+    const res = await fetch(
+      `http://192.168.1.194:8000/listings?status=active`
+    );
 
     const data = await res.json();
 
-    console.log("SELLER RESPONSE:", data);
+    const normalized = data
+      .filter((item) => item?.owner_id && String(item.owner_id) === String(id))
+      .map((item) => ({
+        ...item,
+        images: Array.isArray(item.images)
+          ? item.images
+          : item.images
+          ? [item.images]
+          : item.image
+          ? [item.image]
+          : item.coverImage
+          ? [item.coverImage]
+          : [],
+      }));
+console.log("PROFILE USER ID:", id);
+console.log("TOTAL LISTINGS:", data.length);
+console.log("FILTERED:", normalized.length);
+console.log("FIRST RAW:", data[0]);
+console.log("FIRST NORMALIZED:", normalized[0]);
+    
+setListings(normalized);
+  } catch (err) {
+    console.log("SELLER LISTINGS ERROR:", err);
+  }
+};
 
-    if (!res.ok) return;
+const loadProfile = useCallback(async () => {
+  try {
+    
+    console.log("PROFILE USER:", profileUserId);
+    console.log("TOKEN:", token);
 
-    setUser({
-  _id: data.userId || data._id || data.id,
+    if (!profileUserId) return;
+    if (!token) return;
 
-  full_name:
-    data.fullName ||
-    data.full_name ||
-    data.name ||
-    data.username ||
-    "No Name",
+    const res = await fetch(
+      `http://192.168.1.194:8000/users/${profileUserId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
 
-  city: data.city || "No Location",
-  profileImage: data.profileImage || null,
-  coverImage: data.coverImage || null,
-  about: data.about || "",
+    console.log("STATUS:", res.status);
+
+    const data = await res.json();
+    console.log("PROFILE RESPONSE:", data);
+
+    if (!res.ok) {
+      console.log("PROFILE FAILED");
+      return;
+    }
+
+   setUser({
+  _id: data.userId,
+  full_name: data.fullName,
+  city: data.city,
+  location: data.location,
+  bio: data.bio,
+  created_at: data.created_at,
+  is_verified: data.is_verified,
+  profileImage: data.profileImage,
+  coverImage: data.coverImage,
 });
 
-    fetchSellerListings(profileUserId);
-  } catch (err) {
-    console.log("PROFILE LOAD ERROR:", err);
-  }
-}, [profileUserId, navigation]);
+setBioText(data.bio || "");
 
-useEffect(() => {
-  loadProfile();
-}, [loadProfile]);
- 
+  } catch (err) {
+    console.log("LOAD PROFILE ERROR:", err);
+  }
+}, [profileUserId, token]);
 
   const loadFollowStatus = async () => {
-    try {
-      const token = await getTokenOrLogout(navigation);
-if (!token) return;
+  try {
+    if (!token) return;
 
-console.log("FOLLOW TOKEN:", token);
-console.log("PROFILE USER:", profileUserId);
-console.log("AUTH HEADER:", `Bearer ${token}`);
-      const res = await fetch( 
-        `http://192.168.1.195:8000/follow/status/${profileUserId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+    console.log("FOLLOW TOKEN:", token);
+    console.log("PROFILE USER:", profileUserId);
+    console.log("AUTH HEADER:", `Bearer ${token}`);
 
-      const data = await res.json();
-      if (!res.ok) return;
+    const res = await fetch(
+      `http://192.168.1.194:8000/follow/status/${profileUserId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
 
-      setIsFollowing(data.isFollowing);
-      setStats({
-        followers: data.followers,
-        following: data.following,
-      });
-    } catch (err) {
-      console.log("Follow status error:", err);
-    }
-  };
+    const data = await res.json();
+    if (!res.ok) return;
 
-  useEffect(() => {
-    if (profileUserId) loadFollowStatus();
-  }, [profileUserId]);
-
+    setIsFollowing(data.isFollowing);
+    setStats({
+      followers: data.followers,
+      following: data.following,
+    });
+  } catch (err) {
+    console.log("Follow status error:", err);
+  }
+};
   const openImageOptions = () => {
     Alert.alert("Update Image", "Choose option", [
       { text: "Profile Photo", onPress: () => pickImage("profile") },
@@ -154,6 +187,25 @@ console.log("AUTH HEADER:", `Bearer ${token}`);
       { text: "Cancel", style: "cancel" },
     ]);
   };
+const updateBio = async (bio) => {
+  try {
+    if (!token) return;
+
+    const res = await fetch("http://192.168.1.194:8000/users/bio", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ bio }),
+    });
+
+    const data = await res.json();
+    console.log("BIO UPDATED:", data);
+  } catch (err) {
+    console.log("BIO ERROR:", err);
+  }
+};
 
   const pickImage = async (type) => {
   try {
@@ -167,14 +219,13 @@ console.log("AUTH HEADER:", `Bearer ${token}`);
     if (result.canceled) return;
 
     const imageUri = result.assets[0].uri;
-const token = await getTokenOrLogout(navigation);
-if (!token) return;
+  if (!token) return;
 
     if (type === "profile") {
       setLocalProfileImage(imageUri);
 
       await fetch(
-        `http://192.168.1.195:8000/users/${profileUserId}/profile-image`,
+        `http://192.168.1.194:8000/users/${profileUserId}/profile-image`,
         {
           method: "PUT",
           headers: {
@@ -186,6 +237,7 @@ if (!token) return;
       );
 
       setUser((prev) => ({
+        
         ...prev,
         profileImage: imageUri,
       }));
@@ -194,7 +246,7 @@ if (!token) return;
     if (type === "cover") {
       try {
         const res = await fetch(
-          `http://192.168.1.195:8000/users/${profileUserId}/cover-image`,
+          `http://192.168.1.194:8000/users/${profileUserId}/cover-image`,
           {
             method: "PUT",
             headers: {
@@ -219,22 +271,36 @@ if (!token) return;
     console.log("IMAGE PICK ERROR:", err);
   }
 };
+ 
+useEffect(() => {
+  const unsubscribe = navigation.addListener("focus", () => {
+    if (profileUserId) {
+      fetchSellerListings(profileUserId);
+    }
+  });
 
- const toggleFollow = async () => {
+  return unsubscribe;
+}, [navigation, profileUserId]);
+ 
+const markLocalSold = (listingId) => {
+  setListings((prev) =>
+    prev.map((item) =>
+      item._id === listingId
+        ? { ...item, status: "sold" }
+        : item
+    )
+  );
+};
+
+const toggleFollow = async () => {
   try {
-   const token = await getTokenOrLogout(navigation);
-if (!token) return;
+    if (!token) return;
 
     console.log("FOLLOW BUTTON TOKEN:", token);
 
-    if (!token) {
-      console.log("NO TOKEN FOUND");
-      return;
-    }
-
     const url = isFollowing
-      ? `http://192.168.1.195:8000/unfollow/${profileUserId}`
-      : `http://192.168.1.195:8000/follow/${profileUserId}`;
+      ? `http://192.168.1.194:8000/unfollow/${profileUserId}`
+      : `http://192.168.1.194:8000/follow/${profileUserId}`;
 
     const res = await fetch(url, {
       method: isFollowing ? "DELETE" : "POST",
@@ -258,7 +324,6 @@ if (!token) return;
     console.log("Follow toggle error:", err);
   }
 };
-
   if (!profileUserId) {
     return (
       <View style={styles.center}>
@@ -274,101 +339,213 @@ if (!token) return;
     </View>
   );
 }
- const tabLabels = {
+const tabLabels = {
   listings: t?.listings || "Listings",
+  sold: "Sold",
   about: t?.about || "About",
   more: t?.more || "More",
   boost: "Boost",
 };
- const renderAbout = () => (
-  <View style={styles.aboutBox}>
-    <Text style={styles.sectionTitle}>
-      {t?.aboutSeller || "About Seller"}
-    </Text>
 
-    <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>{t?.bio || "Bio"}</Text>
+ const renderAbout = () => {
+  const activeListings = listings?.filter(
+    (item) => item?.status === "active"
+  )?.length || 0;
+
+  const soldListings = listings?.filter(
+    (item) => item?.status === "sold"
+  )?.length || 0;
+
+  return (
+    <View style={styles.aboutBox}>
+      
+      <Text style={styles.sectionTitle}>
+        {t?.aboutSeller || "About Seller"}
+      </Text>
+
+    {/* BIO */}
+<View style={styles.bioBox}>
+  <Text style={styles.infoLabel}>
+    {t?.bio || "Bio"}
+  </Text>
+
+  {editingBio ? (
+    <>
+      <TextInput
+        value={bioText}
+        onChangeText={(text) => {
+          if (text.length <= 50) setBioText(text);
+        }}
+        autoFocus
+        maxLength={50}
+        multiline
+        style={styles.bioInput}
+        placeholder="Write something about yourself..."
+      />
+
+      <Text style={styles.bioCounter}>
+        {bioText.length}/50
+      </Text>
+
+      <TouchableOpacity
+        onPress={async () => {
+          await updateBio(bioText);
+          setUser((prev) => ({ ...prev, bio: bioText }));
+          setEditingBio(false);
+        }}
+        style={styles.bioDoneBtn}
+      >
+        <Text style={styles.bioDoneText}>Done</Text>
+      </TouchableOpacity>
+    </>
+  ) : (
+    <>
       <Text style={styles.infoValue}>
-        {user.about || t?.noBio || "No bio yet"}
+        {user?.bio || "Modifier la bio"}
       </Text>
-    </View>
 
-    <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>{t?.location || "Location"}</Text>
-      <Text style={styles.infoValue}>
-        {user.city} • {distance}
-      </Text>
-    </View>
+      <TouchableOpacity
+        onPress={() => {
+          setBioText(user?.bio || "");
+          setEditingBio(true);
+        }}
+        style={styles.bioEditBtn}
+      >
+        <Text style={styles.bioEditText}>
+          {user?.bio ? "Modifier la bio" : "Ajouter une bio"}
+        </Text>
+      </TouchableOpacity>
+    </>
+  )}
+</View>
+      {/* LOCATION */}
+      <View style={styles.infoSection}>
+        <Text style={styles.infoLabel}>{t?.location || "Location"}</Text>
+        <Text style={styles.infoValue}>
+          {user?.location || "Unknown"}
+        </Text>
+      </View>
 
-    <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>
-        {t?.activeListings || "Active Listings"}
-      </Text>
-      <Text style={styles.infoValue}>{listings.length}</Text>
-    </View>
+      {/* ACTIVE LISTINGS */}
+      <View style={styles.infoSection}>
+        <Text style={styles.infoLabel}>
+          {t?.activeListings || "Active Listings"}
+        </Text>
+        <Text style={styles.infoValue}>
+          {activeListings}
+        </Text>
+      </View>
 
-    <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>{t?.memberSince || "Member Since"}</Text>
-      <Text style={styles.infoValue}>June 2026</Text>
-    </View>
+      {/* SOLD LISTINGS (this makes it feel REAL now) */}
+      <View style={styles.infoSection}>
+        <Text style={styles.infoLabel}>
+          Sold Listings
+        </Text>
+        <Text style={styles.infoValue}>
+          {soldListings}
+        </Text>
+      </View>
 
-    <View style={styles.infoSection}>
-      <Text style={styles.infoLabel}>{t?.verification || "Verification"}</Text>
-      <Text style={styles.infoValue}>
-        {t?.notVerified || "Not Verified"}
-      </Text>
+      {/* MEMBER SINCE */}
+      <View style={styles.infoSection}>
+        <Text style={styles.infoLabel}>
+          {t?.memberSince || "Member Since"}
+        </Text>
+        <Text style={styles.infoValue}>
+          {memberSince || "Unknown"}
+        </Text>
+      </View>
+
+      {/* VERIFICATION */}
+      <View style={styles.infoSection}>
+        <Text style={styles.infoLabel}>
+          {t?.verification || "Verification"}
+        </Text>
+        <Text style={styles.infoValue}>
+          {user?.is_verified ? "Verified" : "Not Verified"}
+        </Text>
+      </View>
+
     </View>
-  </View>
-);
+  );
+};
+
+const normalizeImages = (item) => {
+  if (Array.isArray(item?.images) && item.images.length > 0) {
+    return item.images;
+  }
+
+  if (typeof item?.images === "string") {
+    return [item.images];
+  }
+
+  if (item?.coverImage) return [item.coverImage];
+  if (item?.image) return [item.image];
+
+  return [];
+};
+
+
 const renderBoost = () => {
   return (
     <View style={styles.boostContainer}>
       <Text style={styles.boostTitle}>Boost Your Listings</Text>
 
-      {listings.map((item) => (
-        <View key={item._id} style={styles.boostCard}>
-          <Image source={{ uri: item.image }} style={styles.boostImage} />
+      {listings.map((item) => {
+        const images = normalizeImages(item);
+        const img = images[0];
 
-          <View style={{ flex: 1 }}>
-            <Text numberOfLines={1} style={styles.boostItemTitle}>
-              {item.title}
-            </Text>
+        return (
+          <View key={item._id} style={styles.boostCard}>
+            <Image
+              source={{ uri: img || "https://via.placeholder.com/100" }}
+              style={styles.boostImage}
+            />
 
-            <Text style={styles.boostPrice}>
-              ${item.price}
-            </Text>
-
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("BoostListingDetail", {
-                  listing: item,
-                })
-              }
-              style={styles.boostActionBtn}
-            >
-              <Text style={styles.boostActionText}>
-                Boost This Listing
+            <View style={{ flex: 1 }}>
+              <Text numberOfLines={1} style={styles.boostItemTitle}>
+                {item.title}
               </Text>
-            </TouchableOpacity>
+
+              <Text style={styles.boostPrice}>${item.price}</Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate("BoostListingDetail", {
+                    listing: item,
+                  })
+                }
+                style={styles.boostActionBtn}
+              >
+                <Text style={styles.boostActionText}>
+                  Boost This Listing
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 };
 
+const filteredListings =
+  activeTab === "listings"
+    ? listings.filter((item) => item.status === "active")
+    : activeTab === "sold"
+    ? listings.filter((item) => item.status === "sold")
+    : [];
+
 return (
   <FlatList
-    key={activeTab === "listings" ? "grid" : "single"}
-    data={listings}
+    key={activeTab}
+    data={filteredListings}
     keyExtractor={(item) => item._id}
-    numColumns={activeTab === "listings" ? 2 : 1}
+    numColumns={activeTab === "listings" || activeTab === "sold" ? 2 : 1}
     style={{ flex: 1 }}
-    contentContainerStyle={{
-      paddingBottom: 40,
-    }}
+    contentContainerStyle={{ paddingBottom: 40 }}
     columnWrapperStyle={
-      activeTab === "listings"
+      activeTab === "listings" || activeTab === "sold"
         ? {
             justifyContent: "space-between",
             width: "100%",
@@ -379,8 +556,7 @@ return (
 
     ListHeaderComponent={() => (
       <View style={{ width: "100%", alignItems: "center" }}>
-
-        {/* BACK BUTTON */}
+        {/* BACK */}
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backBtn}
@@ -392,9 +568,7 @@ return (
         <View style={styles.coverPhoto}>
           {user?.coverImage ? (
             <Image
-              source={{
-                uri: user.coverImage + "?t=" + Date.now(),
-              }}
+              source={{ uri: user.coverImage + "?t=" + Date.now() }}
               style={styles.coverImage}
             />
           ) : (
@@ -414,21 +588,12 @@ return (
 
         {/* PROFILE */}
         <View style={{ marginTop: -60, alignItems: "center" }}>
-          <View style={{ position: "relative" }}>
-            <Image
-              source={{
-                uri: profileImage
-                  ? profileImage + "?t=" + Date.now()
-                  : "https://via.placeholder.com/150",
-              }}
-              style={styles.avatar}
-            />
-
-            <TouchableOpacity
-              onPress={() => pickImage("profile")}
-              style={styles.profileCameraIcon}
-            />
-          </View>
+          <Image
+            source={{
+              uri: profileImage || "https://via.placeholder.com/150",
+            }}
+            style={styles.avatar}
+          />
         </View>
 
         {/* NAME */}
@@ -436,7 +601,7 @@ return (
           {user.full_name}
         </Text>
 
-        {/* FOLLOW BUTTON */}
+        {/* FOLLOW */}
         {!isOwner && (
           <TouchableOpacity
             onPress={toggleFollow}
@@ -468,36 +633,66 @@ return (
               </TouchableOpacity>
             ))}
         </View>
-
       </View>
     )}
 
-    renderItem={({ item }) =>
-      activeTab === "listings" ? (
-        <View style={styles.listingCard}>
-          <Image
-            source={{ uri: item.image }}
-            style={styles.listingImage}
-          />
+    renderItem={({ item }) => {
+      console.log("TITLE:", item.title);
+console.log("IMAGES:", item.images);
+      const images =
+        Array.isArray(item?.images) && item.images.length > 0
+          ? item.images
+          : item?.image
+          ? [item.image]
+          : item?.coverImage
+          ? [item.coverImage]
+          : [];
+
+      const image = images[0] || "https://via.placeholder.com/300";
+
+      return (
+        <TouchableOpacity
+          style={styles.listingCard}
+          onPress={() =>
+            navigation.navigate("ListingDetailScreen", {
+              listing: item,
+            })
+          }
+        >
+          <Image source={{ uri: image }} style={styles.listingImage} />
 
           <Text style={styles.listingTitle} numberOfLines={1}>
             {item.title}
           </Text>
 
-          <Text style={styles.listingPrice}>
-            ${item.price}
-          </Text>
-        </View>
-      ) : null
-    }
+          <Text style={styles.listingPrice}>${item.price}</Text>
 
-    ListFooterComponent={
-      activeTab === "about"
-        ? renderAbout()
-        : activeTab === "boost" && isOwner
-        ? renderBoost()
-        : null
-    }
+          {item.status === "sold" && (
+            <View
+              style={{
+                position: "absolute",
+                top: 8,
+                right: 8,
+                backgroundColor: "red",
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                borderRadius: 6,
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 10 }}>
+                SOLD
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      );
+    }}
+
+    ListFooterComponent={() => {
+      if (activeTab === "about") return renderAbout();
+      if (activeTab === "boost" && isOwner) return renderBoost();
+      return null;
+    }}
   />
 );
 }
@@ -510,13 +705,13 @@ const styles = StyleSheet.create({
   avatar: {
     width: 120,
     height: 120,
-    borderRadius: 60,
+    borderRadius: 50,
   },
 
   name: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginTop: 10,
+    fontSize: 18,
+    fontWeight: "300",
+    marginTop: 5,
   },
 
   followBtn: {
@@ -534,12 +729,12 @@ const styles = StyleSheet.create({
   tabRow: {
   flexDirection: "row",
   justifyContent: "center",
-  width: "100%",
-  marginTop: 20,
+  width: "400%",
+  marginTop: 30,
 },
 
   tabText: {
-    marginHorizontal: 10,
+    marginHorizontal: 25,
     color: "#888",
   },
 
@@ -621,7 +816,7 @@ const styles = StyleSheet.create({
   },
 
   listingTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
     marginTop: 6,
     paddingHorizontal: 6,
@@ -702,5 +897,47 @@ boostActionText: {
   fontSize: 12,
 },
 
-});
+bioBox: {
+  width: "100%",
+  paddingHorizontal: 15,
+  paddingVertical: 10,
+  marginTop: 10,
+},
 
+bioInput: {
+  height: 80,           // 🔥 change this anytime (50, 100, 120 etc)
+  borderWidth: 1,
+  borderColor: "#ddd",
+  borderRadius: 10,
+  padding: 10,
+  textAlignVertical: "top",
+  backgroundColor: "#fff",
+  marginTop: 6,
+},
+
+bioCounter: {
+  fontSize: 12,
+  marginTop: 4,
+  color: "#888",
+  textAlign: "right",
+},
+
+bioDoneBtn: {
+  marginTop: 6,
+  alignSelf: "flex-end",
+},
+
+bioDoneText: {
+  color: "#007AFF",
+  fontWeight: "600",
+},
+
+bioEditBtn: {
+  marginTop: 6,
+},
+
+bioEditText: {
+  color: "#007AFF",
+  fontWeight: "600",
+},
+});

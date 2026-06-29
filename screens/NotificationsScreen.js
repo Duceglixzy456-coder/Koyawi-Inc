@@ -11,11 +11,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { Colors } from "../theme/colors";
 import { getTokenOrLogout } from "../utils/auth";
+import { useAuth } from "../Context/AuthContext";
 
 export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-
+const { token } = useAuth();
   // ================= TIME AGO =================
   const timeAgo = (date) => {
   if (!date) return "";
@@ -42,31 +43,32 @@ export default function NotificationsScreen({ navigation }) {
 
   // ================= FETCH =================
   const fetchNotifications = async () => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
 
-     const token = await getTokenOrLogout(navigation);
-if (!token) return;
+    if (!token) return;
 
-      const res = await fetch("http://192.168.1.195:8000/notifications", {
+    const res = await fetch(
+      "http://192.168.1.194:8000/notifications",
+      {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      }
+    );
 
-      const data = await res.json();
+    const data = await res.json();
 
-      console.log("NOTIFICATIONS:", data);
+    console.log("NOTIFICATIONS:", data);
 
-      setNotifications(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.log("NOTIFICATIONS ERROR:", err);
-      console.log("NOTIF DATE:", item.created_at);
-      setNotifications([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setNotifications(Array.isArray(data) ? data : []);
+  } catch (err) {
+    console.log("NOTIFICATIONS ERROR:", err);
+    setNotifications([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useFocusEffect(
     useCallback(() => {

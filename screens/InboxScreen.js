@@ -14,7 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {jwtDecode } from "jwt-decode";
 import { RefreshControl } from "react-native";
 import { useAuth } from "../Context/AuthContext";
-import { getTokenOrLogout } from "../utils/auth";
+
 
 export default function InboxScreen({ navigation }) {
   const [conversations, setConversations] = useState([]);
@@ -31,18 +31,17 @@ const { token } = useAuth();
 }, [token]);
 
   // ================= FETCH INBOX =================
- const fetchInbox = async () => {
+const fetchInbox = async () => {
   try {
-    setLoading(true);
-
-    const token = await getTokenOrLogout(navigation);
     if (!token) return;
 
-    const decoded = jwtDecode(token); // ✅ THIS MUST EXIST HERE
+    setLoading(true);
+
+    const decoded = jwtDecode(token);
     const userId = decoded.sub;
 
     const res = await fetch(
-      `http://192.168.1.195:8000/conversations/${userId}`,
+      `http://192.168.1.194:8000/conversations/${userId}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -53,7 +52,9 @@ const { token } = useAuth();
     const data = await res.json();
 
     const sorted = data.sort(
-      (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
+      (a, b) =>
+        new Date(b.updated_at || 0) -
+        new Date(a.updated_at || 0)
     );
 
     setConversations(sorted);
@@ -63,10 +64,10 @@ const { token } = useAuth();
     setLoading(false);
   }
 };
-  useEffect(() => {
-    fetchInbox();
-  }, []);
-
+useEffect(() => {
+  if (!token) return;
+  fetchInbox();
+}, [token]);
   // ================= REFRESH =================
 const onRefresh = async () => {
   setRefreshing(true);
@@ -92,14 +93,14 @@ const handleLongPressConversation = (conversationId) => {
           try {
            
 
-            const token = await getTokenOrLogout(navigation);
+           if (!token) return;
 if (!token) return;
 
             // prevent double deletion spam
           
 
             const res = await fetch(
-              `http://192.168.1.195:8000/conversations/${conversationId}`,
+              `http://192.168.1.194:8000/conversations/${conversationId}`,
               {
                 method: "DELETE",
                 headers: {

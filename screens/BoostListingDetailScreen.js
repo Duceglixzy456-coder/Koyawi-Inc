@@ -3,11 +3,13 @@ import {
   View,
   Text,
   Image,
+  Alert,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Linking } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function BoostListingDetailScreen({ navigation, route }) {
@@ -15,7 +17,50 @@ export default function BoostListingDetailScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
 
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const handleBoost = async () => {
+  
+ const openWhatsApp = (plan) => {
+  const phoneNumber = "13472798416";
+
+  const message = `Bonjour l’équipe KOYAWI 👋
+
+Je souhaite booster mon annonce :
+
+📦 Titre : ${listing.title}
+💰 Prix : ${listing.price}
+⏳ Plan : ${plan.label}
+🆔 ID : ${listing._id}`;
+
+  const url = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+
+  Alert.alert(
+    "Contacter le support",
+    "Vous allez être redirigé vers WhatsApp pour finaliser votre demande de boost.",
+    [
+      {
+        text: "Annuler",
+        style: "cancel",
+      },
+      {
+        text: "Continuer",
+        onPress: async () => {
+          try {
+            const canOpen = await Linking.canOpenURL(url);
+
+            if (canOpen) {
+              await Linking.openURL(url);
+            } else {
+              console.log("Impossible d’ouvrir WhatsApp");
+            }
+          } catch (err) {
+            console.log("ERREUR WHATSAPP :", err);
+          }
+        },
+      },
+    ]
+  );
+};
+  
+   const handleBoost = async () => {
   if (!selectedPlan) return;
 
   try {
@@ -29,7 +74,7 @@ export default function BoostListingDetailScreen({ navigation, route }) {
     }
 
     const res = await fetch(
-      `http://192.168.1.195:8000/boost/${listing._id}`,
+      `http://192.168.1.194:8000/boost/${listing._id}`,
       {
         method: "POST",
         headers: {
@@ -50,14 +95,17 @@ export default function BoostListingDetailScreen({ navigation, route }) {
       return;
     }
 
-   Alert.alert(
-  "Contact Support",
-  "Contact KOYAWI support to activate listing promotion.",
+ Alert.alert(
+  "Activation en cours",
+  "Veuillez contacter le support KOYAWI pour activer la promotion de votre annonce.",
   [
-    { text: "OK" }
+    { text: "Annuler", style: "cancel" },
+    {
+      text: "Continuer",
+      onPress: () => openWhatsApp(selectedPlan),
+    },
   ]
 );
-
     // go back after success
     navigation.goBack();
 
@@ -74,6 +122,8 @@ export default function BoostListingDetailScreen({ navigation, route }) {
     { label: "7 jours", days: 7, priceGNF: 100000, usd: 12 },
     { label: "1 mois", days: 30, priceGNF: 250000, usd: 30 },
   ];
+
+
 
   return (
   <ScrollView

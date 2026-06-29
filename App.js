@@ -14,9 +14,9 @@ export default function App() {
       <SafeAreaProvider>
         <LanguageProvider>
           <AuthProvider>
-            <SocketProvider>
+             
               <RootNavigator />
-            </SocketProvider>
+             
           </AuthProvider>
         </LanguageProvider>
       </SafeAreaProvider>

@@ -20,7 +20,7 @@ export default function BoostListingScreen({ navigation }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch("http://192.168.1.195:8000/listings");
+        const res = await fetch("http://192.168.1.194:8000/listings");
         const data = await res.json();
         setListings(data);
       } catch (err) {

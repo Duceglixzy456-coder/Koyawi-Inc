@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -11,18 +11,17 @@ import {
   Platform,
 } from "react-native";
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../Context/AuthContext";
 import { Colors } from "../theme/colors";
 
 function SellScreen({ navigation }) {
-  
-const { token } = useAuth();
+  const { token } = useAuth();
+
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
-  const [image, setImage] = useState(null);
+  const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState("Cars");
 
@@ -34,28 +33,39 @@ const { token } = useAuth();
     "Essentials",
   ];
 
-  
-  const pickImage = async () => {
+  // ---------------- PICK IMAGE ----------------
+ const pickImage = async () => {
   try {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, // ✅ FIXED
-      allowsEditing: true,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,   // ✅ THIS IS THE KEY
+      selectionLimit: 5,               // ✅ max 5 photos
       quality: 1,
     });
 
     if (!result.canceled) {
-      setImage(result.assets[0].uri);
+      const uris = result.assets.map((asset) => asset.uri);
+
+      setImages((prev) => {
+        const combined = [...prev, ...uris];
+        return combined.slice(0, 5); // hard cap at 5
+      });
     }
   } catch (err) {
     console.log("IMAGE PICK ERROR:", err);
   }
 };
+  // ---------------- REMOVE IMAGE ----------------
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
 
+  // ---------------- CREATE LISTING ----------------
   const createListing = async () => {
     try {
       if (!token) return alert("Please login again");
 
-      if (!title || !price || !description || !image) {
+      if (!title || !price || !description || !images?.length) {
         alert("Please fill all fields and add an image.");
         return;
       }
@@ -75,13 +85,15 @@ const { token } = useAuth();
       formData.append("description", description);
       formData.append("category", category);
 
-      formData.append("file", {
-        uri: image,
-        type: "image/jpeg",
-        name: "photo.jpg",
+      images.forEach((img, index) => {
+        formData.append("files", {
+          uri: img,
+          type: "image/jpeg",
+          name: `photo_${index}.jpg`,
+        });
       });
 
-      const res = await fetch("http://192.168.1.195:8000/listings", {
+      const res = await fetch("http://192.168.1.194:8000/listings", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -100,7 +112,7 @@ const { token } = useAuth();
       setTitle("");
       setPrice("");
       setDescription("");
-      setImage(null);
+      setImages([]);
       setCategory("Cars");
 
       navigation.navigate("Home");
@@ -110,7 +122,7 @@ const { token } = useAuth();
     } finally {
       setLoading(false);
     }
-  }; 
+  };
 
   const inputStyle = {
     backgroundColor: Colors.card,
@@ -132,30 +144,89 @@ const { token } = useAuth();
           Sell your item
         </Text>
 
-        {/* IMAGE */}
-        <TouchableOpacity
-          onPress={pickImage}
+        {/* IMAGE UPLOADER */}
+        <View
           style={{
             height: 190,
             borderRadius: 16,
             backgroundColor: Colors.card,
-            justifyContent: "center",
-            alignItems: "center",
             marginBottom: 15,
             overflow: "hidden",
           }}
         >
-          {image ? (
-            <Image source={{ uri: image }} style={{ width: "100%", height: "100%" }} />
-          ) : (
-            <Text>Tap to add photo</Text>
+          {/* TAP AREA */}
+          <TouchableOpacity
+            onPress={pickImage}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: images.length === 0 ? 10 : 0,
+            }}
+          >
+            {images.length === 0 && (
+              <Text>Tap to add photo</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* IMAGE SCROLLER */}
+          {images.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+            >
+              {images.map((img, index) => (
+                <View key={index} style={{ position: "relative" }}>
+                  <Image
+                    source={{ uri: img }}
+                    style={{
+                      width: 160,
+                      height: 160,
+                      borderRadius: 12,
+                      margin: 10,
+                    }}
+                  />
+
+                  {/* REMOVE */}
+                  <TouchableOpacity
+                    onPress={() => removeImage(index)}
+                    style={{
+                      position: "absolute",
+                      top: 15,
+                      right: 15,
+                      backgroundColor: "rgba(0,0,0,0.6)",
+                      borderRadius: 20,
+                      padding: 5,
+                    }}
+                  >
+                    <Text style={{ color: "#fff", fontSize: 12 }}>
+                      X
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
           )}
-        </TouchableOpacity>
+        </View>
 
         {/* INPUTS */}
-        <TextInput placeholder="Title" value={title} onChangeText={setTitle} style={inputStyle} />
+        <TextInput
+          placeholder="Title"
+          value={title}
+          onChangeText={setTitle}
+          style={inputStyle}
+        />
 
-        <TextInput placeholder="Price" value={price} onChangeText={setPrice} style={inputStyle} />
+        <TextInput
+          placeholder="Price"
+          value={price}
+          onChangeText={setPrice}
+          style={inputStyle}
+        />
 
         <TextInput
           placeholder="Description"
@@ -165,8 +236,10 @@ const { token } = useAuth();
           multiline
         />
 
-        {/* CATEGORY PICKER */}
-        <Text style={{ fontWeight: "600", marginBottom: 8 }}>Category</Text>
+        {/* CATEGORY */}
+        <Text style={{ fontWeight: "600", marginBottom: 8 }}>
+          Category
+        </Text>
 
         <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 15 }}>
           {categories.map((item) => {
@@ -184,7 +257,12 @@ const { token } = useAuth();
                   backgroundColor: active ? "#111" : "#eee",
                 }}
               >
-                <Text style={{ color: active ? "#fff" : "#333", fontWeight: "600" }}>
+                <Text
+                  style={{
+                    color: active ? "#fff" : "#333",
+                    fontWeight: "600",
+                  }}
+                >
                   {item}
                 </Text>
               </TouchableOpacity>
@@ -192,7 +270,7 @@ const { token } = useAuth();
           })}
         </View>
 
-        {/* BUTTON */}
+        {/* SUBMIT */}
         <TouchableOpacity
           onPress={createListing}
           style={{

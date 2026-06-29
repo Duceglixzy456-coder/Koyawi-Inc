@@ -9,7 +9,7 @@ import {
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import  {jwtDecode } from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import { Colors } from "../theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -44,7 +44,7 @@ if (!token) return;
 
       const isSaved = savedMap?.[listingId];
 
-      const url = `http://192.168.1.195:8000/save/${listingId}`;
+      const url = `http://192.168.1.194:8000/save/${listingId}`;
       const method = isSaved ? "DELETE" : "POST";
 
       const res = await fetch(url, {
@@ -62,31 +62,7 @@ if (!token) return;
       console.log("SAVE ERROR:", err);
     }
   };
-
-  // ---------------- FETCH ----------------
-  const fetchListings = async () => {
-    try {
-      const res = await fetch("http://192.168.1.195:8000/listings");
-      const data = await res.json();
-      setListings(data || []);
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchListings();
-    }, [])
-  );
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchListings();
-    setRefreshing(false);
-  };
-
-  const openMyProfile = async () => {
+const openMyProfile = async () => {
   try {
     const token = await getTokenOrLogout(navigation);
     if (!token) return;
@@ -94,74 +70,107 @@ if (!token) return;
     const decoded = jwtDecode(token);
 
     navigation.navigate("SellerProfile", {
-      userId: decoded.sub,
+      sellerId: decoded.sub, // IMPORTANT: must match SellerProfileScreen
     });
   } catch (err) {
-    console.log(err);
+    console.log("OPEN PROFILE ERROR:", err);
   }
 };
+
+const onRefresh = async () => {
+  try {
+    setRefreshing(true);
+    await fetchListings();
+  } catch (err) {
+    console.log("REFRESH ERROR:", err);
+  } finally {
+    setRefreshing(false);
+  }
+};
+  // ---------------- FETCH ----------------
+  const fetchListings = async () => {
+  try {
+    const res = await fetch(
+      "http://192.168.1.194:8000/listings?status=active"
+    );
+
+    const data = await res.json();
+
+    console.log("RAW LISTINGS:", data);
+    console.log("FIRST ITEM:", data?.[0]);
+
+    const normalized = (data || []).map((item) => ({
+      ...item,
+      status: item.status || "active",
+      images: Array.isArray(item.images)
+        ? item.images
+        : item.images
+        ? [item.images]
+        : item.image
+        ? [item.image]
+        : item.coverImage
+        ? [item.coverImage]
+        : [],
+    }));
+    console.log("FETCH STARTED");
+console.log("DATA LENGTH:", data?.length);
+console.log("RAW DATA:", data);
+setListings(normalized);
+console.log("STATE SET:", normalized.length);
+
+ setListings(normalized)
+  } catch (err) {
+    console.log("HOME LISTINGS ERROR:", err);
+  }
+};
+
   // ---------------- FILTERS ----------------
 const applyFilters = (data, sortBy, search, selectedCategory) => {
-    let result = [...(data || [])];
+  let result = Array.isArray(data) ? [...data] : [];
 
-    if (search?.trim()) {
-      result = result.filter((item) =>
-        item?.title?.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-if (selectedCategory !== "All") {
-  result = result.filter((item) => {
-    const text = `${item?.title || ""} ${item?.category || ""}`.toLowerCase();
+  // ---------------- SEARCH ----------------
+  if (search?.trim()) {
+    result = result.filter((item) =>
+      (item?.title || "").toLowerCase().includes(search.toLowerCase())
+    );
+  }
 
-    if (selectedCategory === "Cars") {
-      return text.includes("car") || text.includes("bmw") || text.includes("benz") || text.includes("toyota");
-    }
+  // ---------------- CATEGORY FILTER ----------------
+  if (selectedCategory !== "All") {
+    result = result.filter((item) => {
+      const category = (item?.category || "").toLowerCase();
+      return category === selectedCategory.toLowerCase();
+    });
+  }
 
-    if (selectedCategory === "Electronics") {
-      return text.includes("phone") || text.includes("iphone") || text.includes("laptop") || text.includes("tv");
-    }
+  // ---------------- SORT ----------------
+  if (sortBy === "newest") {
+    result.sort(
+      (a, b) =>
+        new Date(b?.created_at || 0).getTime() -
+        new Date(a?.created_at || 0).getTime()
+    );
+  }
 
-    if (selectedCategory === "Sneakers") {
-      return text.includes("nike") || text.includes("jordan") || text.includes("yeezy");
-    }
+  if (sortBy === "oldest") {
+    result.sort(
+      (a, b) =>
+        new Date(a?.created_at || 0).getTime() -
+        new Date(b?.created_at || 0).getTime()
+    );
+  }
 
-    if (selectedCategory === "Clothes") {
-      return text.includes("shirt") || text.includes("hoodie") || text.includes("jeans");
-    }
+  if (sortBy === "price_high") {
+    result.sort((a, b) => (b?.price || 0) - (a?.price || 0));
+  }
 
-    if (selectedCategory === "Essentials") {
-      return true; // fallback
-    }
+  if (sortBy === "price_low") {
+    result.sort((a, b) => (a?.price || 0) - (b?.price || 0));
+  }
 
-    return false;
-  });
-}
-    if (sortBy === "newest") {
-      result.sort(
-        (a, b) =>
-          new Date(b?.created_at || 0) - new Date(a?.created_at || 0)
-      );
-    }
-
-    if (sortBy === "oldest") {
-      result.sort(
-        (a, b) =>
-          new Date(a?.created_at || 0) - new Date(b?.created_at || 0)
-      );
-    }
-
-    if (sortBy === "price_high") {
-      result.sort((a, b) => (b?.price || 0) - (a?.price || 0));
-    }
-
-    if (sortBy === "price_low") {
-      result.sort((a, b) => (a?.price || 0) - (b?.price || 0));
-    }
-
-    return result;
-  };
-
- const filteredData = applyFilters(listings, sortBy, search, selectedCategory);
+  return result;
+};
+const filteredData = listings;
 
   const formatTitle = (title) => {
     if (!title) return "";
@@ -267,123 +276,143 @@ if (selectedCategory !== "All") {
 
       {/* LISTINGS */}
       <FlatList
-        data={filteredData}
-        keyExtractor={(item) => item._id?.toString()}
-        numColumns={2}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-        contentContainerStyle={{ padding: 10 }}
-        columnWrapperStyle={{ justifyContent: "space-between" }}
-       renderItem={({ item }) => {
-  
+  data={filteredData}
+  keyExtractor={(item, index) =>
+    item?._id ? item._id.toString() : index.toString()
+  }
+  numColumns={2}
+  refreshing={refreshing}
+  onRefresh={onRefresh}
+  contentContainerStyle={{ padding: 10 }}
+  columnWrapperStyle={{ justifyContent: "space-between" }}
+  renderItem={({ item }) => {
+    const img =
+      item?.images?.length > 0
+        ? item.images[0]
+        : item?.coverImage
+        ? item.coverImage
+        : item?.image
+        ? item.image
+        : null;
 
-  return (
-    <TouchableOpacity
-      onPress={() =>
-        navigation.navigate("ListingDetailScreen", { listing: item })
-      }
-      style={{
-        backgroundColor: Colors.card,
-        width: "48%",
-        marginBottom: 12,
-        borderRadius: 14,
-        overflow: "hidden",
-        position: "relative",
-      }}
-    >
-      {/* HEART */}
+    if (!item?._id) return null;
+console.log("HOME LISTINGS COUNT:", listings.length);
+console.log("FILTERED COUNT:", filteredData.length);
+    return (
       <TouchableOpacity
-        onPress={() => toggleSave(item._id)}
+        onPress={() =>
+          navigation.navigate("ListingDetailScreen", { listing: item })
+        }
         style={{
-          position: "absolute",
-          top: 8,
-          right: 8,
-          zIndex: 10,
-          backgroundColor: "rgba(255,255,255,0.7)",
-          padding: 6,
-          borderRadius: 20,
+          backgroundColor: Colors.card,
+          width: "48%",
+          marginBottom: 12,
+          borderRadius: 14,
+          overflow: "hidden",
         }}
       >
-        <Ionicons
-          name={savedMap?.[item._id] ? "heart" : "heart-outline"}
-          size={24}
-          color={savedMap?.[item._id] ? "#ff3b30" : "#000"}
-        />
-      </TouchableOpacity>
+        {/* HEART */}
+        <TouchableOpacity
+          onPress={() => toggleSave(item._id)}
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            zIndex: 10,
+          }}
+        >
+          <Ionicons
+            name={savedMap?.[item._id] ? "heart" : "heart-outline"}
+            size={24}
+            color={savedMap?.[item._id] ? "#ff3b30" : "#000"}
+          />
+        </TouchableOpacity>
 
-      <Image
-        source={{
-          uri:
-            item.image && item.image.startsWith("http")
-              ? item.image
-              : "https://via.placeholder.com/300",
-        }}
-        style={{ width: "100%", height: 140 }}
+        {/* IMAGE */}
+        {img ? (
+          <Image source={{ uri: img }} style={{ width: "100%", height: 140 }} />
+        ) : (
+          <View style={{ height: 140, justifyContent: "center", alignItems: "center" }}>
+            <Text>No image</Text>
+          </View>
+        )}
+
+        {/* TEXT */}
+        <View style={{ padding: 10 }}>
+          <Text numberOfLines={1}>{formatTitle(item.title)}</Text>
+          <Text>${item.price}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }}
       />
 
-      <View style={{ padding: 10 }}>
-        <Text numberOfLines={1}>{formatTitle(item.title)}</Text>
-        <Text>${item.price}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}}
-      />
-{showCategories && (
-  <View
-    style={{
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: Colors.background,
-      padding: 20,
-    }}
-  >
-    {/* HEADER */}
-    <View
-      style={{
-        flexDirection: "row",
-        justifyContent: "space-between",
-        marginTop: 40,
-        marginBottom: 20,
-      }}
-    >
-      <Text style={{ fontSize: 22, fontWeight: "700", color: Colors.text }}>
-        Categories
-      </Text>
+      {showCategories && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: Colors.background,
+            padding: 20,
+          }}
+        >
+          {/* HEADER */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              marginTop: 40,
+              marginBottom: 20,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                color: Colors.text,
+              }}
+            >
+              Categories
+            </Text>
 
-      <TouchableOpacity onPress={() => setShowCategories(false)}>
-        <Ionicons name="close" size={28} color={Colors.text} />
-      </TouchableOpacity>
-    </View>
+            <TouchableOpacity onPress={() => setShowCategories(false)}>
+              <Ionicons name="close" size={28} color={Colors.text} />
+            </TouchableOpacity>
+          </View>
 
-    {/* CATEGORY LIST */}
-    {categories.map((item) => (
-      <TouchableOpacity
-        key={item}
-        onPress={() => {
-          setSelectedCategory(item);
-          setShowCategories(false);
-        }}
-        style={{
-          padding: 16,
-          borderRadius: 12,
-          marginBottom: 10,
-          backgroundColor:
-            selectedCategory === item ? "#ddd" : Colors.card,
-        }}
-      >
-        <Text style={{ fontSize: 16, fontWeight: "600", color: Colors.text }}>
-          {item}
-        </Text>
-      </TouchableOpacity>
-    ))}
-  </View>
-)}
+          {/* CATEGORY LIST */}
+          {categories.map((item) => (
+            <TouchableOpacity
+              key={item}
+              onPress={() => {
+                setSelectedCategory(item);
+                setShowCategories(false);
+              }}
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                marginBottom: 10,
+                backgroundColor:
+                  selectedCategory === item ? "#ddd" : Colors.card,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: Colors.text,
+                }}
+              >
+                {item}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
-      {/* FILTERS */}
       {showFilters && (
         <View
           style={{
@@ -404,7 +433,13 @@ if (selectedCategory !== "All") {
               marginBottom: 30,
             }}
           >
-            <Text style={{ fontSize: 24, fontWeight: "700", color: Colors.text }}>
+            <Text
+              style={{
+                fontSize: 24,
+                fontWeight: "700",
+                color: Colors.text,
+              }}
+            >
               Filters
             </Text>
 

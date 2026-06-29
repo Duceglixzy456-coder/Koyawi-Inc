@@ -27,7 +27,7 @@ export default function EditListingScreen({ route, navigation }) {
 if (!token) return;
 
       const res = await fetch(
-        `http://192.168.1.195:8000/listings/${listing._id}`,
+        `http://192.168.1.194:8000/listings/${listing._id}`,
         {
           method: "PUT",
           headers: {

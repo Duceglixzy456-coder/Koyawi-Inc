@@ -4,18 +4,26 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { useAuth } from "../Context/AuthContext";
 
+// Screens
+import LoadingScreen from "./LoadingScreen";
 import LoginScreen from "./LoginScreen";
 import SignupScreen from "./SignupScreen";
 import MainApp from "./MainApp";
 import BoostListingsScreen from "./BoostListingsScreen";
+import ListingDetailScreen from "./ListingDetailScreen";
 import BoostListingDetailScreen from "./BoostListingDetailScreen";
 import HelpCenterScreen from "./HelpCenterScreen";
 import PolicyCenterHubScreen from "./PolicyCenterHubScreen";
 import CommunityGuidelinesScreen from "./CommunityGuidelinesScreen";
 import TermsPoliciesScreen from "./TermsPoliciesScreen";
 import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
-import { getTokenOrLogout } from "../utils/auth";
-import SessionExpiredScreen from "../screens/SessionExpiredScreen";
+import SessionExpiredScreen from "./SessionExpiredScreen";
+import ChatScreen from "./ChatScreen";
+import SelectBuyerScreen from "../screens/SelectBuyerScreen";
+import ConfirmSaleScreen from "../screens/ConfirmSaleScreen";
+
+import { SocketProvider } from "../realtime/SocketContext";
+
 const Stack = createNativeStackNavigator();
 
 function AuthStack() {
@@ -36,9 +44,23 @@ function AppStack() {
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       <Stack.Screen name="TermsPolicies" component={TermsPoliciesScreen} />
       <Stack.Screen name="CommunityGuidelines" component={CommunityGuidelinesScreen} />
-      <Stack.Screen name="BoostListings"component={BoostListingsScreen}/>
-      <Stack.Screen name="BoostListingDetail"component={BoostListingDetailScreen}/>
-    <Stack.Screen name="SessionExpired"component={SessionExpiredScreen}/>
+      <Stack.Screen name="BoostListings" component={BoostListingsScreen} />
+      <Stack.Screen name="BoostListingDetail" component={BoostListingDetailScreen} />
+      <Stack.Screen name="SessionExpired" component={SessionExpiredScreen} />
+      <Stack.Screen name="ChatScreen" component={ChatScreen} />
+      <Stack.Screen
+  name="SelectBuyerScreen"
+  component={SelectBuyerScreen}
+/>
+
+<Stack.Screen
+  name="ConfirmSaleScreen"
+  component={ConfirmSaleScreen}
+/>
+      <Stack.Screen
+        name="ListingDetailScreen"
+        component={ListingDetailScreen}
+      />
     </Stack.Navigator>
   );
 }
@@ -47,12 +69,14 @@ export default function RootNavigator() {
   const { token, loading } = useAuth();
 
   if (loading) {
-    return null; // or splash screen later
+    return <LoadingScreen />;
   }
 
   return (
-    <NavigationContainer>
-      {token ? <AppStack /> : <AuthStack />}
-    </NavigationContainer>
+    <SocketProvider>
+      <NavigationContainer>
+        {token ? <AppStack /> : <AuthStack />}
+      </NavigationContainer>
+    </SocketProvider>
   );
 }
