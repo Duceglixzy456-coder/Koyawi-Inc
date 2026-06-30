@@ -88,7 +88,7 @@ const onRefresh = async () => {
   const fetchListings = useCallback(async () => {
   try {
     const res = await fetch(
-      "http://192.168.1.194:8000/listings?status=active"
+     "http://192.168.1.194:8000/listings?status=active&skip=0&limit=20"
     );
 
     const data = await res.json();

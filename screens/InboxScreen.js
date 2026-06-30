@@ -115,11 +115,22 @@ useFocusEffect(
     fetchInbox();
   }, [fetchInbox])
 );
+const [now, setNow] = useState(Date.now());
 
+useEffect(() => {
+  const interval = setInterval(() => {
+    setNow(Date.now());
+  }, 60000); // update every 60 seconds
+
+  return () => clearInterval(interval);
+}, []);
 const getTimeAgo = (dateString) => {
   if (!dateString) return "";
 
-  const date = new Date(dateString);
+  // 🔥 FIX MICROSECONDS (.124000 → .124)
+  const cleaned = dateString.split(".")[0] + "Z";
+
+  const date = new Date(cleaned);
 
   if (isNaN(date.getTime())) {
     console.log("BAD DATE:", dateString);

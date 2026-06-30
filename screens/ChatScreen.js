@@ -98,27 +98,49 @@ const loadMessages = async () => {
 useEffect(() => {
   loadMessages();
 }, [conversationId, token]);
+
+
+const API_URL = "http://192.168.1.194:8000";
+
+// ---------------- MARK AS READ ----------------
+const markAsRead = async () => {
+  try {
+    await fetch(`${API_URL}/messages/read`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        conversation_id: conversationId,
+      }),
+    });
+  } catch (err) {
+    console.log("MARK READ ERROR:", err);
+  }
+};
+
+// run once when screen opens
 useEffect(() => {
   if (!conversationId || !token) return;
-
-  const markAsRead = async () => {
-    try {
-      await fetch(
-        `http://192.168.1.194:8000/conversations/${conversationId}/read`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-    } catch (err) {
-      console.log("MARK AS READ ERROR:", err);
-    }
-  };
-
   markAsRead();
 }, [conversationId, token]);
+
+const formatGuineaTime = (dateString) => {
+  if (!dateString) return "";
+
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return "";
+
+  return date.toLocaleTimeString("en-GB", {
+    timeZone: "Africa/Conakry", // 🇬🇳 Guinea
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false, // 24-hour format
+  });
+};
+
+
   // ---------------- SEND MESSAGE ----------------
   
  const handleSendMessage = async () => {
@@ -172,17 +194,10 @@ useEffect(() => {
     console.log("SEND ERROR:", err);
   }
 };
-const handleScroll = (event) => {
-  const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
 
-  const isCloseToBottom =
-    layoutMeasurement.height + contentOffset.y >= contentSize.height - 50;
-
-  setShowScrollButton(!isCloseToBottom);
-};
 const scrollToBottom = () => {
   flatListRef.current?.scrollToEnd({ animated: true });
-  setShowScrollToBottom(false);
+  setShowScrollButton(false);
 };
 useEffect(() => {
   if (isAtBottom) {
@@ -210,26 +225,43 @@ useEffect(() => {
   prevMessageLength.current = current;
 }, [messages]);
 useEffect(() => {
-  const removeListener = addMessageListener((message) => {
-    setMessages((prev) => {
-      if (!message?._id) return prev;
+  const removeListener = addMessageListener((data) => {
+    
+    // =========================
+    // 1. NEW MESSAGE
+    // =========================
+    if (data._id && data.text) {
+      setMessages((prev) => {
+        if (data.conversation_id !== conversationId) return prev;
+        if (prev.some((m) => m._id === data._id)) return prev;
 
-      if (message.conversation_id !== conversationId) return prev;
+        const updated = [...prev, data];
 
-      if (prev.some((m) => m._id === message._id)) return prev;
+        if (isAtBottom) {
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 50);
+        } else {
+          setShowScrollButton(true);
+        }
 
-      const updated = [...prev, message];
+        return updated;
+      });
+    }
 
-      if (isAtBottom) {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 50);
-      } else {
-        setShowScrollButton(true);
-      }
-
-      return updated;
-    });
+    // =========================
+    // 2. READ RECEIPTS
+    // =========================
+    if (data.type === "messages_read") {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.conversation_id === data.conversation_id &&
+          msg.sender_id === currentUserId
+            ? { ...msg, status: "read" }
+            : msg
+        )
+      );
+    }
   });
 
   return removeListener;
@@ -241,41 +273,32 @@ const renderItem = ({ item }) => {
   const renderStatus = () => {
     if (!isMe) return null;
 
-    if (item.status === "sent") {
-      return <Text style={styles.check}>✓</Text>;
+    const status = item.status || "sent";
+
+    if (status === "sent") {
+      return <Text style={[styles.check, { color: "gray" }]}>✓</Text>;
     }
 
-    if (item.status === "delivered") {
-      return <Text style={styles.check}>✓✓</Text>;
+    if (status === "delivered") {
+      return <Text style={[styles.check, { color: "gray" }]}>✓✓</Text>;
     }
 
-    if (item.status === "read") {
-      return (
-        <Text style={[styles.check, { color: "#4aa3ff" }]}>
-          ✓✓
-        </Text>
-      );
+    if (status === "read") {
+      return <Text style={[styles.check, { color: "#4aa3ff" }]}>✓✓</Text>;
     }
 
     return null;
   };
 
   return (
-    <View
-      style={{
-        alignSelf: isMe ? "flex-end" : "flex-start",
-        backgroundColor: isMe ? (item.pending ? "#333" : "#111") : "#fff",
-        padding: 12,
-        marginVertical: 4,
-        borderRadius: 16,
-        maxWidth: "80%",
-      }}
-    >
-      <Text style={{ color: isMe ? "#fff" : "#000" }}>
-        {item.text}
-      </Text>
+    <View style={isMe ? styles.myMessage : styles.theirMessage}>
+      <Text style={styles.messageText}>{item.text}</Text>
 
-      <View style={{ alignItems: "flex-end", marginTop: 3 }}>
+      <View style={styles.rowBottom}>
+        <Text style={styles.timeText}>
+          {formatGuineaTime(item.created_at)}
+        </Text>
+
         {renderStatus()}
       </View>
     </View>
@@ -449,9 +472,123 @@ const renderItem = ({ item }) => {
 );
 }
 const styles = {
+  // ================= CONTAINER =================
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+
+  // ================= MESSAGE LIST WRAPPER =================
+  listContent: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingBottom: 20,
+  },
+
+  // ================= MESSAGE WRAPPER =================
+  messageContainer: {
+    width: "100%",
+    marginVertical: 2,
+  },
+
+  // ================= MY MESSAGE (RIGHT SIDE) =================
+  myMessage: {
+    alignSelf: "flex-end",
+    backgroundColor: "#DCF8C6",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+
+    maxWidth: "75%",
+  },
+
+  // ================= THEIR MESSAGE (LEFT SIDE) =================
+  theirMessage: {
+    alignSelf: "flex-start",
+    backgroundColor: "#F2F2F2",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+
+    maxWidth: "75%",
+  },
+
+  // ================= MESSAGE TEXT =================
+  messageText: {
+    fontSize: 15,
+    color: "#111",
+    lineHeight: 20,
+  },
+
+  // ================= TIME + CHECK ROW =================
+  rowBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: 4,
+    gap: 6,
+  },
+
+  // ================= TIME TEXT =================
+  timeText: {
+    fontSize: 11,
+    color: "#777",
+  },
+
+  // ================= CHECK MARKS =================
   check: {
     fontSize: 11,
-    color: "#999",
+    fontWeight: "600",
+  },
+
+  // ================= INPUT AREA =================
+  inputContainer: {
+    flexDirection: "row",
+    padding: 10,
+    borderTopWidth: 1,
+    borderColor: "#eee",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+
+  textInput: {
+    flex: 1,
+    backgroundColor: "#f2f2f2",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 20,
+    fontSize: 14,
+  },
+
+  sendButton: {
+    marginLeft: 10,
+    backgroundColor: "#2b2b2b",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+
+  sendText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+
+  // ================= SCROLL BUTTON =================
+  scrollButton: {
+    position: "absolute",
+    bottom: 100,
+    alignSelf: "center",
+    backgroundColor: "#111",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 25,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  scrollText: {
+    color: "#fff",
+    fontSize: 13,
     fontWeight: "600",
   },
 };

@@ -18,8 +18,6 @@ export const SocketProvider = ({ children }) => {
   const listenersRef = useRef([]);
   const queueRef = useRef([]);
 
-  
-
   const [connected, setConnected] = useState(false);
 
   const getUserId = () => {
@@ -30,29 +28,28 @@ export const SocketProvider = ({ children }) => {
     }
   };
 
+  const notifyListeners = (data) => {
+    listenersRef.current.forEach((fn) => fn(data));
+  };
+
   const connect = () => {
-  const userId = getUserId();
-  if (!userId) return;
+    const userId = getUserId();
+    if (!userId) return;
 
-  // 🚨 STEP 3 FIX: prevent duplicate socket recreation
-  if (socketRef.current?.readyState === WebSocket.OPEN) {
-    return;
-  }
+    if (socketRef.current?.readyState === WebSocket.OPEN) return;
 
-  // only close if socket exists but is dead
-  if (
-    socketRef.current &&
-    socketRef.current.readyState !== WebSocket.OPEN
-  ) {
-    socketRef.current.close();
-    socketRef.current = null;
-  }
+    if (
+      socketRef.current &&
+      socketRef.current.readyState !== WebSocket.OPEN
+    ) {
+      socketRef.current.close();
+      socketRef.current = null;
+    }
 
-  console.log("WS CONNECTING →", userId);
+    console.log("WS CONNECTING →", userId);
 
-  const socket = new WebSocket(`ws://192.168.1.194:8000/ws/${userId}`);
-
-  socketRef.current = socket;
+    const socket = new WebSocket(`ws://192.168.1.194:8000/ws/${userId}`);
+    socketRef.current = socket;
 
     socket.onopen = () => {
       console.log("WS CONNECTED ✅");
@@ -67,11 +64,12 @@ export const SocketProvider = ({ children }) => {
       try {
         const data = JSON.parse(event.data);
 
-        if (data.type === "pong") return;
+        console.log("WS MESSAGE:", data);
 
-        listenersRef.current.forEach((fn) => fn(data));
+        // broadcast to all screens
+        notifyListeners(data);
       } catch (e) {
-        console.log("WS PARSE ERROR:", e);
+        console.log("WS PARSE ERROR", e);
       }
     };
 
@@ -86,26 +84,14 @@ export const SocketProvider = ({ children }) => {
   };
 
   useEffect(() => {
-  if (loading || !token) return;
+    if (loading || !token) return;
 
-  const userId = getUserId();
-  if (!userId) return;
+    connect();
 
-  // if already connected with same socket → do nothing
-  if (
-    socketRef.current &&
-    socketRef.current.readyState === WebSocket.OPEN
-  ) {
-    return;
-  }
-
-  connect();
-
-  return () => {
-    // IMPORTANT: do NOT aggressively close on every rerender
-    // only close on real logout/unmount
-  };
-}, [token, loading]);
+    return () => {
+      // only cleanup on real logout
+    };
+  }, [token, loading]);
 
   const sendMessage = (payload) => {
     const socket = socketRef.current;
@@ -119,13 +105,16 @@ export const SocketProvider = ({ children }) => {
 
   const addMessageListener = (fn) => {
     listenersRef.current.push(fn);
+
     return () => {
       listenersRef.current = listenersRef.current.filter((f) => f !== fn);
     };
   };
 
   return (
-    <SocketContext.Provider value={{ connected, sendMessage, addMessageListener }}>
+    <SocketContext.Provider
+      value={{ connected, sendMessage, addMessageListener }}
+    >
       {children}
     </SocketContext.Provider>
   );
