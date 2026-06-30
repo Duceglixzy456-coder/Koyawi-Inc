@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback,useMemo } from "react";
 import {
   View,
   Text,
@@ -8,13 +8,13 @@ import {
   Image,
 } from "react-native";
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import { jwtDecode } from "jwt-decode";
 import { Colors } from "../theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../Context/AuthContext";
-import { getTokenOrLogout } from "../utils/auth";
+
 export default function HomeScreen({ navigation }) {
   const [search, setSearch] = useState("");
   const [listings, setListings] = useState([]);
@@ -23,7 +23,7 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [savedMap, setSavedMap] = useState({});
- const { token: contextToken } = useAuth();
+const { token } = useAuth();
   // ✅ CATEGORIES (FIXED)
   const categories = [
   "All",
@@ -39,8 +39,7 @@ export default function HomeScreen({ navigation }) {
   // ---------------- SAVE ----------------
   const toggleSave = async (listingId) => {
     try {
-     const token = await getTokenOrLogout(navigation);
-if (!token) return;
+   if (!token) return;
 
       const isSaved = savedMap?.[listingId];
 
@@ -64,11 +63,9 @@ if (!token) return;
   };
 const openMyProfile = async () => {
   try {
-    const token = await getTokenOrLogout(navigation);
-    if (!token) return;
+   if (!token) return;
 
-    const decoded = jwtDecode(token);
-
+const decoded = jwtDecode(token);
     navigation.navigate("SellerProfile", {
       sellerId: decoded.sub, // IMPORTANT: must match SellerProfileScreen
     });
@@ -88,16 +85,13 @@ const onRefresh = async () => {
   }
 };
   // ---------------- FETCH ----------------
-  const fetchListings = async () => {
+  const fetchListings = useCallback(async () => {
   try {
     const res = await fetch(
       "http://192.168.1.194:8000/listings?status=active"
     );
 
     const data = await res.json();
-
-    console.log("RAW LISTINGS:", data);
-    console.log("FIRST ITEM:", data?.[0]);
 
     const normalized = (data || []).map((item) => ({
       ...item,
@@ -112,18 +106,17 @@ const onRefresh = async () => {
         ? [item.coverImage]
         : [],
     }));
-    console.log("FETCH STARTED");
-console.log("DATA LENGTH:", data?.length);
-console.log("RAW DATA:", data);
-setListings(normalized);
-console.log("STATE SET:", normalized.length);
 
- setListings(normalized)
+    setListings(normalized);
   } catch (err) {
     console.log("HOME LISTINGS ERROR:", err);
   }
-};
-
+}, []);
+useFocusEffect(
+  useCallback(() => {
+    fetchListings();
+  }, [fetchListings])
+);
   // ---------------- FILTERS ----------------
 const applyFilters = (data, sortBy, search, selectedCategory) => {
   let result = Array.isArray(data) ? [...data] : [];
@@ -170,7 +163,9 @@ const applyFilters = (data, sortBy, search, selectedCategory) => {
 
   return result;
 };
-const filteredData = listings;
+const filteredData = useMemo(() => {
+  return applyFilters(listings, sortBy, search, selectedCategory);
+}, [listings, sortBy, search, selectedCategory]);
 
   const formatTitle = (title) => {
     if (!title) return "";
@@ -296,8 +291,7 @@ const filteredData = listings;
         : null;
 
     if (!item?._id) return null;
-console.log("HOME LISTINGS COUNT:", listings.length);
-console.log("FILTERED COUNT:", filteredData.length);
+
     return (
       <TouchableOpacity
         onPress={() =>

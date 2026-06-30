@@ -1,28 +1,45 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
+
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   FlatList,
+  Image,
+  ActivityIndicator,
+  SafeAreaView,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
+  RefreshControl,
 } from "react-native";
+
+import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { jwtDecode } from "jwt-decode";
+
 import { useAuth } from "../Context/AuthContext";
 import { api } from "../utils/api";
 import { useSocket } from "../realtime/SocketContext";
-import { jwtDecode } from "jwt-decode";
 
 export default function ChatScreen({ route, navigation }) {
   const { conversationId, otherUserId, listingTitle, prefilledMessage } =
     route?.params || {};
 
  const { sendMessage, addMessageListener } = useSocket();
+
+const [showScrollButton, setShowScrollButton] = useState(false);
 const flatListRef = useRef(null);
+const [newMessageCount, setNewMessageCount] = useState(0);
 const { token } = useAuth();
 const [isAtBottom, setIsAtBottom] = useState(true);
-const [showNewMessageBtn, setShowNewMessageBtn] = useState(false);
+
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState(prefilledMessage || "");
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -32,7 +49,16 @@ const [showNewMessageBtn, setShowNewMessageBtn] = useState(false);
     : listingTitle || "Chat";
 
 
+useEffect(() => {
+  if (!conversationId || !currentUserId) return;
 
+  fetch(
+    `http://192.168.1.194:8000/messages/read/${conversationId}?user_id=${currentUserId}`,
+    {
+      method: "PUT",
+    }
+  );
+}, []);
 // ---------------- USER ID ----------------
 useEffect(() => {
   if (!token) return;
@@ -71,6 +97,27 @@ const loadMessages = async () => {
 
 useEffect(() => {
   loadMessages();
+}, [conversationId, token]);
+useEffect(() => {
+  if (!conversationId || !token) return;
+
+  const markAsRead = async () => {
+    try {
+      await fetch(
+        `http://192.168.1.194:8000/conversations/${conversationId}/read`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+    } catch (err) {
+      console.log("MARK AS READ ERROR:", err);
+    }
+  };
+
+  markAsRead();
 }, [conversationId, token]);
   // ---------------- SEND MESSAGE ----------------
   
@@ -125,6 +172,43 @@ useEffect(() => {
     console.log("SEND ERROR:", err);
   }
 };
+const handleScroll = (event) => {
+  const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+
+  const isCloseToBottom =
+    layoutMeasurement.height + contentOffset.y >= contentSize.height - 50;
+
+  setShowScrollButton(!isCloseToBottom);
+};
+const scrollToBottom = () => {
+  flatListRef.current?.scrollToEnd({ animated: true });
+  setShowScrollToBottom(false);
+};
+useEffect(() => {
+  if (isAtBottom) {
+    flatListRef.current?.scrollToEnd({ animated: true });
+    setNewMessageCount(0);
+  }
+}, [messages]);
+const prevMessageLength = useRef(0);
+
+useEffect(() => {
+  const prev = prevMessageLength.current;
+  const current = messages.length;
+
+  if (current > prev) {
+    const newMessages = current - prev;
+
+    if (!isAtBottom) {
+      setNewMessageCount((c) => c + newMessages);
+      setShowScrollButton(true);
+    } else {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }
+  }
+
+  prevMessageLength.current = current;
+}, [messages]);
 useEffect(() => {
   const removeListener = addMessageListener((message) => {
     setMessages((prev) => {
@@ -141,7 +225,7 @@ useEffect(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 50);
       } else {
-        setShowNewMessageBtn(true);
+        setShowScrollButton(true);
       }
 
       return updated;
@@ -153,6 +237,28 @@ useEffect(() => {
  // ---------------- RENDER MESSAGE ----------------
 const renderItem = ({ item }) => {
   const isMe = item.sender_id === currentUserId;
+
+  const renderStatus = () => {
+    if (!isMe) return null;
+
+    if (item.status === "sent") {
+      return <Text style={styles.check}>✓</Text>;
+    }
+
+    if (item.status === "delivered") {
+      return <Text style={styles.check}>✓✓</Text>;
+    }
+
+    if (item.status === "read") {
+      return (
+        <Text style={[styles.check, { color: "#4aa3ff" }]}>
+          ✓✓
+        </Text>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <View
@@ -166,8 +272,12 @@ const renderItem = ({ item }) => {
       }}
     >
       <Text style={{ color: isMe ? "#fff" : "#000" }}>
-  {item.text}
-</Text>
+        {item.text}
+      </Text>
+
+      <View style={{ alignItems: "flex-end", marginTop: 3 }}>
+        {renderStatus()}
+      </View>
     </View>
   );
 };
@@ -224,50 +334,82 @@ const renderItem = ({ item }) => {
   removeClippedSubviews={false}
   showsVerticalScrollIndicator={false}
 
+  // ✅ STEP 6 ADDITIONS (SMOOTH + STABLE CHAT)
+  maintainVisibleContentPosition={{
+    minIndexForVisible: 0,
+  }}
+  keyboardShouldPersistTaps="handled"
+
   // ================= WHATSAPP SCROLL DETECTION =================
   onScroll={(event) => {
-  const { layoutMeasurement, contentOffset, contentSize } =
-    event.nativeEvent;
+    const { layoutMeasurement, contentOffset, contentSize } =
+      event.nativeEvent;
 
-  const paddingToBottom = 80;
+    const paddingToBottom = 70;
 
-  const isBottom =
-    layoutMeasurement.height + contentOffset.y >=
-    contentSize.height - paddingToBottom;
+    const distanceFromBottom =
+      contentSize.height -
+      (layoutMeasurement.height + contentOffset.y);
 
-  setIsAtBottom(isBottom);
+    const atBottom = distanceFromBottom < paddingToBottom;
 
-  if (isBottom) {
-    setShowNewMessageBtn(false);
-  }
-}}
-scrollEventThrottle={16}
+    setIsAtBottom(atBottom);
+
+    if (atBottom) {
+      setShowScrollButton(false);
+      setNewMessageCount(0);
+    }
+  }}
+  scrollEventThrottle={16}
 />
-{showNewMessageBtn && (
+{showScrollButton && (
   <TouchableOpacity
     onPress={() => {
       flatListRef.current?.scrollToEnd({ animated: true });
-      setShowNewMessageBtn(false);
+      setShowScrollButton(false);
+      setNewMessageCount(0);
       setIsAtBottom(true);
+      
     }}
+    activeOpacity={0.85}
     style={{
       position: "absolute",
-      bottom: 90,
+      bottom: 100,
       alignSelf: "center",
-      backgroundColor: "#111",
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 20,
+
       flexDirection: "row",
       alignItems: "center",
+
+      backgroundColor: "#111",
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 25,
+
+      shadowColor: "#000",
+      shadowOpacity: 0.2,
+      shadowRadius: 10,
+      elevation: 6,
     }}
   >
-    <Text style={{ color: "#fff", fontSize: 12 }}>
-      New messages ↓
+    <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>
+      {newMessageCount > 0
+        ? `New messages (${newMessageCount})`
+        : "New messages"}
+    </Text>
+
+    {/* clean arrow (no emoji) */}
+    <Text
+      style={{
+        color: "#fff",
+        fontSize: 16,
+        marginLeft: 8,
+        transform: [{ rotate: "180deg" }],
+      }}
+    >
+      ˄
     </Text>
   </TouchableOpacity>
 )}
-
       {/* INPUT */}
       <View
         style={{
@@ -306,3 +448,10 @@ scrollEventThrottle={16}
   </SafeAreaView>
 );
 }
+const styles = {
+  check: {
+    fontSize: 11,
+    color: "#999",
+    fontWeight: "600",
+  },
+};

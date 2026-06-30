@@ -1,22 +1,35 @@
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   FlatList,
   Image,
   ActivityIndicator,
   SafeAreaView,
-  Alert
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
 } from "react-native";
 
-import React, { useState, useEffect } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {jwtDecode } from "jwt-decode";
-import { RefreshControl } from "react-native";
+import { jwtDecode } from "jwt-decode";
+
 import { useAuth } from "../Context/AuthContext";
 
-
-export default function InboxScreen({ navigation }) {
+export default function ChatScreen({ route, navigation }) {
+ const conversationId = route?.params?.conversationId;
+const otherUserId = route?.params?.otherUserId;
+const listingTitle = route?.params?.listingTitle;
+const otherUserName = route?.params?.otherUserName;
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,6 +86,55 @@ const onRefresh = async () => {
   setRefreshing(true);
   await fetchInbox();
   setRefreshing(false);
+};
+
+useEffect(() => {
+  if (!conversationId || !token) return;
+
+  const markAsRead = async () => {
+    try {
+      await fetch(
+        `http://192.168.1.194:8000/conversations/${conversationId}/read`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+    } catch (err) {
+      console.log("READ ERROR:", err);
+    }
+  };
+
+  markAsRead();
+}, [conversationId, token]);
+
+useFocusEffect(
+  useCallback(() => {
+    fetchInbox();
+  }, [fetchInbox])
+);
+
+const getTimeAgo = (dateString) => {
+  if (!dateString) return "";
+
+  const date = new Date(dateString);
+
+  if (isNaN(date.getTime())) {
+    console.log("BAD DATE:", dateString);
+    return "";
+  }
+
+  const now = Date.now();
+  const diff = Math.floor((now - date.getTime()) / 1000);
+
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
+
+  return date.toLocaleDateString();
 };
   // ================= DELETE CONVERSATION =================
 const handleLongPressConversation = (conversationId) => {
@@ -133,68 +195,115 @@ if (!token) return;
     { cancelable: true }
   );
 };
-  // ================= RENDER ITEM =================
   const renderItem = ({ item }) => {
   const otherUserId =
     item.buyer_id === currentUserId
       ? item.seller_id
       : item.buyer_id;
 
-  return (
-    <TouchableOpacity
-      onPress={() =>
-        navigation.navigate("Chat", {
-          conversationId: item._id,
-          otherUserId,
-          listingTitle: item.listing_title,
-        })
-      }
-      onLongPress={() => handleLongPressConversation(item._id)}
-      delayLongPress={400}
-      style={{
-        flexDirection: "row",
-        padding: 14,
-        marginBottom: 10,
-        backgroundColor: "#fff",
-        borderRadius: 14,
-        alignItems: "center",
+  const otherUserName =
+    item.buyer_id === currentUserId
+      ? item.seller_name
+      : item.buyer_name;
+const listingImage =
+  Array.isArray(item.listing_images) && item.listing_images.length > 0
+    ? item.listing_images[0]
+    : Array.isArray(item.images) && item.images.length > 0
+    ? item.images[0]
+    : item.listing_image
+    ? item.listing_image
+    : item.image
+    ? item.image
+    : item.coverImage
+    ? item.coverImage
+    : null;
+
+const unread = item?.unread_counts?.[currentUserId] ?? 0;
+
+return (
+  <TouchableOpacity
+    onPress={() =>
+      navigation.navigate("Chat", {
+        conversationId: item._id,
+        otherUserId,
+        listingTitle: item.listing_title,
+        otherUserName,
+      })
+    }
+    onLongPress={() => handleLongPressConversation(item._id)}
+    delayLongPress={400}
+    style={{
+      flexDirection: "row",
+      padding: 14,
+      marginBottom: 10,
+      backgroundColor: "#fff",
+      borderRadius: 14,
+      alignItems: "center",
+    }}
+  >
+    {/* IMAGE */}
+    <Image
+      source={{
+        uri: listingImage || "https://via.placeholder.com/100",
       }}
-    >
-      <Image
-        source={{
-          uri: item.listing_image || "https://via.placeholder.com/100",
-        }}
+      style={{
+        width: 45,
+        height: 45,
+        borderRadius: 12,
+        marginRight: 12,
+      }}
+    />
+
+    {/* TEXT */}
+    <View style={{ flex: 1 }}>
+      
+      {/* TITLE ROW + BLUE DOT */}
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Text
+          style={{
+            fontSize: 15,
+            fontWeight: unread > 0 ? "700" : "600",
+          }}
+          numberOfLines={1}
+        >
+          {otherUserName || "Unknown"} • {item.listing_title || "Untitled Listing"}
+        </Text>
+
+        {unread > 0 && (
+          <View
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: "#1877F2",
+              marginLeft: 6,
+            }}
+          />
+        )}
+      </View>
+
+      {/* LAST MESSAGE */}
+      <Text
         style={{
-          width: 45,
-          height: 45,
-          borderRadius: 12,
-          marginRight: 12,
+          fontSize: 13,
+          color: unread > 0 ? "#000" : "#777",
+          fontWeight: unread > 0 ? "600" : "400",
         }}
-      />
+        numberOfLines={1}
+      >
+        {item.last_message || "No messages yet"}
+      </Text>
+    </View>
 
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 15, fontWeight: "600" }} numberOfLines={1}>
-          {item.listing_title || "Untitled Listing"}
-        </Text>
-
-        <Text style={{ fontSize: 13, color: "#777" }} numberOfLines={1}>
-          {item.last_message || "No messages yet"}
-        </Text>
-      </View>
-
-      <View style={{ alignItems: "flex-end" }}>
-        <Text style={{ fontSize: 11, color: "#999" }}>
-          {item.updated_at
-            ? new Date(item.updated_at).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : ""}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-};
+   {/* TIME */}
+<View style={{ alignItems: "flex-end" }}>
+  <Text style={{ fontSize: 11, color: "#999" }}>
+  {item.updated_at ? getTimeAgo(item.updated_at) : ""}
+  </Text>
+</View>
+  </TouchableOpacity>
+);
+  }
   // ================= UI =================
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F6F7FB" }}>

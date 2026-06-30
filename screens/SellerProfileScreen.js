@@ -587,14 +587,29 @@ return (
         </View>
 
         {/* PROFILE */}
-        <View style={{ marginTop: -60, alignItems: "center" }}>
-          <Image
-            source={{
-              uri: profileImage || "https://via.placeholder.com/150",
-            }}
-            style={styles.avatar}
-          />
-        </View>
+<View style={{ marginTop: -60, alignItems: "center" }}>
+  <View>
+    <Image
+      source={{
+        uri: profileImage || "https://via.placeholder.com/150",
+      }}
+      style={styles.avatar}
+    />
+
+    {isOwner && (
+      <TouchableOpacity
+        onPress={() => pickImage("profile")}
+        style={styles.profileCameraIcon}
+      >
+        <Ionicons
+          name="camera"
+          size={14}
+          color="#fff"
+        />
+      </TouchableOpacity>
+    )}
+  </View>
+</View>
 
         {/* NAME */}
         <Text style={[styles.name, { textAlign: "center" }]}>
