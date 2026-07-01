@@ -1,45 +1,37 @@
-import React, { useEffect } from "react";
-import { View, Text, ActivityIndicator } from "react-native";
-import { jwtDecode } from "jwt-decode";
-import { useAuth } from "../Context/AuthContext";
+import React, { useEffect, useRef } from "react";
+import { View, Text, StyleSheet, ActivityIndicator, Animated } from "react-native";
 
-export default function LoadingScreen() {
-  const { token, logout } = useAuth();
-
-  const validateToken = async () => {
-    try {
-      if (!token) {
-        logout();
-        return;
-      }
-
-      let decoded;
-
-      try {
-        decoded = jwtDecode(token);
-      } catch (e) {
-        logout();
-        return;
-      }
-
-      if (!decoded?.exp || decoded.exp * 1000 < Date.now()) {
-        logout();
-        return;
-      }
-    } catch (err) {
-      console.log("LOADING ERROR:", err);
-      logout();
-    }
-  };
+export default function LoadingScreen({ text = "Loading..." }) {
+  const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    validateToken();
-  }, [token]);
+    Animated.timing(fade, {
+      toValue: 1,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <ActivityIndicator size="large" />
-      <Text>Loading...</Text>
-    </View>
+    <Animated.View style={[styles.container, { opacity: fade }]}>
+      <ActivityIndicator size="large" color="#ffffff" />
+      <Text style={styles.text}>{text}</Text>
+    </Animated.View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#0f0f0f",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  text: {
+    marginTop: 12,
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    opacity: 0.8,
+  },
+});

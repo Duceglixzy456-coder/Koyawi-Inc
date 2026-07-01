@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -9,91 +9,78 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import NotificationSkeleton from "../components/Skeletons/NotificationSkeleton";
 import { Colors } from "../theme/colors";
-import { getTokenOrLogout } from "../utils/auth";
 import { useAuth } from "../Context/AuthContext";
-
+const API_URL = "http://192.168.1.194:8000";
 export default function NotificationsScreen({ navigation }) {
+  
+
   const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-const { token } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { token } = useAuth();
+
+  // 👇 prevents refetch every single focus
+  const hasLoadedOnce = useRef(false);
+
   // ================= TIME AGO =================
-  const timeAgo = (date) => {
-  if (!date) return "";
+const timeAgo = (dateString) => {
+  if (!dateString) return "";
 
-  const now = new Date();
-  const past = new Date(date);
+  // 🔥 FIX MICROSECONDS (.124000 → .124)
+  const cleaned = dateString.split(".")[0] + "Z";
 
-  const diffMs = now - past;
+  const date = new Date(cleaned);
 
-  const seconds = Math.floor(diffMs / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  const weeks = Math.floor(days / 7);
-  const years = Math.floor(days / 365);
+  if (isNaN(date.getTime())) {
+    console.log("BAD DATE:", dateString);
+    return "";
+  }
 
-  if (seconds < 60) return "just now";
-  if (minutes < 60) return `${minutes} min${minutes === 1 ? "" : "s"} ago`;
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
-  if (weeks < 52) return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
-  return `${years} year${years === 1 ? "" : "s"} ago`;
+  const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
+
+  return date.toLocaleDateString();
 };
-
   // ================= FETCH =================
-  const fetchNotifications = async () => {
+ const fetchNotifications = async (silent = false) => {
   try {
-    setLoading(true);
+    if (!silent) setLoading(true);
 
-    if (!token) return;
-
-    const res = await fetch(
-      "http://192.168.1.194:8000/notifications",
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const res = await fetch(`${API_URL}/notifications`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
     const data = await res.json();
 
-    console.log("NOTIFICATIONS:", data);
+    console.log("NOTIFICATIONS:", data); // debug
 
-    setNotifications(Array.isArray(data) ? data : []);
+    setNotifications(data);
+    hasLoadedOnce.current = true;
+
   } catch (err) {
-    console.log("NOTIFICATIONS ERROR:", err);
-    setNotifications([]);
+    console.log("Notifications error:", err);
   } finally {
     setLoading(false);
+    setRefreshing(false);
   }
 };
-
+  // ================= FIX: STOP REFETCH EVERY FOCUS =================
   useFocusEffect(
-    useCallback(() => {
+  useCallback(() => {
+    if (token) {
       fetchNotifications();
-    }, [])
-  );
-
-  // ================= LOADING =================
-  if (loading) {
-    return (
-      <View style={styles.empty}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
-
-  // ================= EMPTY =================
-  if (!loading && notifications.length === 0) {
-    return (
-      <View style={styles.empty}>
-        <Ionicons name="notifications-outline" size={34} color="#999" />
-        <Text style={styles.emptyText}>No recent activity</Text>
-      </View>
-    );
-  }
+    }
+  }, [token])
+);
 
   // ================= RENDER ITEM =================
   const renderItem = ({ item }) => {
@@ -101,9 +88,7 @@ const { token } = useAuth();
       <View style={styles.card}>
         <Image
           source={{
-            uri:
-              item.from_profile_image ||
-              "https://via.placeholder.com/50",
+            uri: item.from_profile_image || "https://via.placeholder.com/50",
           }}
           style={styles.avatar}
         />
@@ -117,9 +102,9 @@ const { token } = useAuth();
             {item.text || "New activity"}
           </Text>
 
-          <Text style={styles.time}>
-            {timeAgo(item.created_at)}
-          </Text>
+        <Text style={styles.time}>
+  {timeAgo(item.created_at)}
+</Text>
         </View>
 
         <Ionicons name="notifications" size={18} color="#999" />
@@ -127,7 +112,8 @@ const { token } = useAuth();
     );
   };
 
-  // ================= UI =================
+// ================= UI =================
+if (loading) {
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -135,15 +121,39 @@ const { token } = useAuth();
         <Text style={styles.headerTitle}>Account Activity</Text>
       </View>
 
-      {/* LIST */}
-      <FlatList
-        data={notifications}
-        keyExtractor={(item) => item._id}
-        renderItem={renderItem}
-        contentContainerStyle={{ padding: 15, paddingTop: 5 }}
-      />
+      <NotificationSkeleton />
     </View>
   );
+}
+
+return (
+  <View style={styles.container}>
+    {/* HEADER */}
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>Account Activity</Text>
+    </View>
+
+    {/* LIST */}
+    <FlatList
+      data={notifications}
+      keyExtractor={(item) => item._id}
+      renderItem={renderItem}
+      contentContainerStyle={{ padding: 15, paddingTop: 5 }}
+      ListEmptyComponent={
+        <View style={styles.empty}>
+          <Ionicons
+            name="notifications-outline"
+            size={34}
+            color="#999"
+          />
+          <Text style={styles.emptyText}>
+            No recent activity
+          </Text>
+        </View>
+      }
+    />
+  </View>
+);
 }
 
 // ================= STYLES =================
@@ -201,6 +211,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    marginTop: 100,
   },
 
   emptyText: {

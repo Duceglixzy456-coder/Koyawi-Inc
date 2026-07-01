@@ -411,8 +411,11 @@ React.useEffect(() => {
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() =>
+              
               navigation.navigate("Chat", {
                 conversationId: item.id,
+                listingId: item.listing_id,
+                console.log("LISTING OBJECT:", item);
               })
             }
             style={{

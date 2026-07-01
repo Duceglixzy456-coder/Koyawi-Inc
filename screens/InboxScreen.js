@@ -22,7 +22,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
-
+import { useSocket } from "../realtime/SocketContext";
 import { useAuth } from "../Context/AuthContext";
 
 export default function ChatScreen({ route, navigation }) {
@@ -34,6 +34,8 @@ const otherUserName = route?.params?.otherUserName;
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+const { addMessageListener } = useSocket();
+
 const { token } = useAuth();
   // ================= GET USER =================
   useEffect(() => {
@@ -44,7 +46,7 @@ const { token } = useAuth();
 }, [token]);
 
   // ================= FETCH INBOX =================
-const fetchInbox = async () => {
+const fetchInbox = useCallback(async () => {
   try {
     if (!token) return;
 
@@ -56,18 +58,14 @@ const fetchInbox = async () => {
     const res = await fetch(
       `http://192.168.1.194:8000/conversations/${userId}`,
       {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       }
     );
 
     const data = await res.json();
 
     const sorted = data.sort(
-      (a, b) =>
-        new Date(b.updated_at || 0) -
-        new Date(a.updated_at || 0)
+      (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0)
     );
 
     setConversations(sorted);
@@ -76,11 +74,11 @@ const fetchInbox = async () => {
   } finally {
     setLoading(false);
   }
-};
+}, [token]);
 useEffect(() => {
   if (!token) return;
   fetchInbox();
-}, [token]);
+}, [fetchInbox]);
   // ================= REFRESH =================
 const onRefresh = async () => {
   setRefreshing(true);
@@ -88,27 +86,38 @@ const onRefresh = async () => {
   setRefreshing(false);
 };
 
+
+// ================= MARK AS READ =================
 useEffect(() => {
-  if (!conversationId || !token) return;
+  if (!conversationId || !token || !currentUserId) return;
 
   const markAsRead = async () => {
     try {
-      await fetch(
-        `http://192.168.1.194:8000/conversations/${conversationId}/read`,
+      const res = await fetch(
+        `http://192.168.1.194:8000/messages/read`,
         {
           method: "POST",
           headers: {
+            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
+          body: JSON.stringify({
+            conversation_id: conversationId,
+          }),
         }
       );
+
+      if (!res.ok) return;
+
+      await fetchInbox();
     } catch (err) {
       console.log("READ ERROR:", err);
     }
   };
 
   markAsRead();
-}, [conversationId, token]);
+}, [conversationId, token, currentUserId, fetchInbox]);
+
 
 useFocusEffect(
   useCallback(() => {
@@ -124,6 +133,35 @@ useEffect(() => {
 
   return () => clearInterval(interval);
 }, []);
+useEffect(() => {
+  if (!addMessageListener || !currentUserId) return;
+
+  const unsub = addMessageListener((msg) => {
+    if (!msg?.conversation_id) return;
+
+    const isOpenChat = msg.conversation_id === conversationId;
+
+    setConversations((prev) =>
+      prev.map((conv) => {
+        if (conv._id !== msg.conversation_id) return conv;
+
+        return {
+          ...conv,
+          last_message: msg.text,
+          last_sender_id: msg.sender_id,
+          updated_at: msg.created_at,
+        };
+      })
+    );
+
+    // 🔥 ONLY REFRESH if NOT open chat
+    if (!isOpenChat) {
+      fetchInbox();
+    }
+  });
+
+  return unsub;
+}, [addMessageListener, currentUserId, conversationId, fetchInbox]);
 const getTimeAgo = (dateString) => {
   if (!dateString) return "";
 
@@ -166,7 +204,7 @@ const handleLongPressConversation = (conversationId) => {
           try {
            
 
-           if (!token) return;
+           
 if (!token) return;
 
             // prevent double deletion spam
@@ -206,7 +244,8 @@ if (!token) return;
     { cancelable: true }
   );
 };
-  const renderItem = ({ item }) => {
+
+ const renderItem = ({ item }) => {
   const otherUserId =
     item.buyer_id === currentUserId
       ? item.seller_id
@@ -216,105 +255,113 @@ if (!token) return;
     item.buyer_id === currentUserId
       ? item.seller_name
       : item.buyer_name;
-const listingImage =
-  Array.isArray(item.listing_images) && item.listing_images.length > 0
-    ? item.listing_images[0]
-    : Array.isArray(item.images) && item.images.length > 0
-    ? item.images[0]
-    : item.listing_image
-    ? item.listing_image
-    : item.image
-    ? item.image
-    : item.coverImage
-    ? item.coverImage
-    : null;
 
-const unread = item?.unread_counts?.[currentUserId] ?? 0;
+  const listingImage =
+    Array.isArray(item.listing_images) && item.listing_images.length > 0
+      ? item.listing_images[0]
+      : Array.isArray(item.images) && item.images.length > 0
+      ? item.images[0]
+      : item.listing_image
+      ? item.listing_image
+      : item.image
+      ? item.image
+      : item.coverImage
+      ? item.coverImage
+      : null;
 
-return (
-  <TouchableOpacity
-    onPress={() =>
-      navigation.navigate("Chat", {
-        conversationId: item._id,
-        otherUserId,
-        listingTitle: item.listing_title,
-        otherUserName,
-      })
-    }
-    onLongPress={() => handleLongPressConversation(item._id)}
-    delayLongPress={400}
-    style={{
-      flexDirection: "row",
-      padding: 14,
-      marginBottom: 10,
-      backgroundColor: "#fff",
-      borderRadius: 14,
-      alignItems: "center",
-    }}
-  >
-    {/* IMAGE */}
-    <Image
-      source={{
-        uri: listingImage || "https://via.placeholder.com/100",
+ const unread = Number(
+  item?.unread_counts?.[currentUserId] ?? 0
+);
+
+  const isLastMessageMine = item.last_sender_id === currentUserId;
+
+  return (
+    <TouchableOpacity
+      onPress={() => {
+        navigation.navigate("Chat", {
+          conversationId: item._id,
+          otherUserId,
+          listingId: item.listing_id,
+          listingTitle: item.listing_title,
+          otherUserName,
+        });
       }}
+      onLongPress={() => handleLongPressConversation(item._id)}
+      delayLongPress={400}
       style={{
-        width: 45,
-        height: 45,
-        borderRadius: 12,
-        marginRight: 12,
+        flexDirection: "row",
+        padding: 14,
+        marginBottom: 10,
+        backgroundColor: "#fff",
+        borderRadius: 14,
+        alignItems: "center",
       }}
-    />
+    >
+      {/* IMAGE */}
+      <Image
+        source={{
+          uri: listingImage || "https://via.placeholder.com/100",
+        }}
+        style={{
+          width: 45,
+          height: 45,
+          borderRadius: 12,
+          marginRight: 12,
+        }}
+      />
 
-    {/* TEXT */}
-    <View style={{ flex: 1 }}>
-      
-      {/* TITLE ROW + BLUE DOT */}
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
+      {/* TEXT */}
+      <View style={{ flex: 1 }}>
+        {/* TITLE ROW + BLUE DOT */}
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Text
+            style={{
+              fontSize: 15,
+              fontWeight: unread > 0 ? "700" : "600",
+            }}
+            numberOfLines={1}
+          >
+            {otherUserName || "Unknown"} • {item.listing_title || "Untitled Listing"}
+          </Text>
+
+          {unread > 0 && (
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: "#1877F2",
+                marginLeft: 6,
+              }}
+            />
+          )}
+        </View>
+
+        {/* LAST MESSAGE */}
         <Text
           style={{
-            fontSize: 15,
-            fontWeight: unread > 0 ? "700" : "600",
+            fontSize: 13,
+            color: unread > 0 ? "#000" : "#777",
+            fontWeight: unread > 0 ? "600" : "400",
           }}
           numberOfLines={1}
         >
-          {otherUserName || "Unknown"} • {item.listing_title || "Untitled Listing"}
+          {isLastMessageMine
+            ? `You: ${item.last_message || ""}`
+            : item.last_message || "No messages yet"}
         </Text>
-
-        {unread > 0 && (
-          <View
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: "#1877F2",
-              marginLeft: 6,
-            }}
-          />
-        )}
       </View>
 
-      {/* LAST MESSAGE */}
-      <Text
-        style={{
-          fontSize: 13,
-          color: unread > 0 ? "#000" : "#777",
-          fontWeight: unread > 0 ? "600" : "400",
-        }}
-        numberOfLines={1}
-      >
-        {item.last_message || "No messages yet"}
-      </Text>
-    </View>
-
-   {/* TIME */}
-<View style={{ alignItems: "flex-end" }}>
-  <Text style={{ fontSize: 11, color: "#999" }}>
-  {item.updated_at ? getTimeAgo(item.updated_at) : ""}
-  </Text>
-</View>
-  </TouchableOpacity>
-);
-  }
+      {/* TIME */}
+      <View style={{ alignItems: "flex-end" }}>
+        <Text style={{ fontSize: 11, color: "#999" }}>
+          {item.updated_at ? getTimeAgo(item.updated_at) : ""}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+  
   // ================= UI =================
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F6F7FB" }}>
@@ -341,6 +388,7 @@ return (
       ) : (
        <FlatList
   data={conversations}
+  extraData={conversations}
   keyExtractor={(item) => item._id}
   renderItem={renderItem}
   contentContainerStyle={{

@@ -69,14 +69,12 @@ export default function RootNavigator() {
   const { token, loading } = useAuth();
 
   if (loading) {
-    return <LoadingScreen />;
+    return <LoadingScreen text="Bienvenue à KOYAWI..." />;
   }
 
   return (
-    <SocketProvider>
-      <NavigationContainer>
-        {token ? <AppStack /> : <AuthStack />}
-      </NavigationContainer>
-    </SocketProvider>
+    <NavigationContainer>
+      {token ? <AppStack /> : <AuthStack />}
+    </NavigationContainer>
   );
 }

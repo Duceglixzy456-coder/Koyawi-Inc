@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useRef,
   useState,
+  useCallback,
 } from "react";
 import { jwtDecode } from "jwt-decode";
 import { useAuth } from "../Context/AuthContext";
@@ -15,40 +16,46 @@ export const SocketProvider = ({ children }) => {
   const { token, loading } = useAuth();
 
   const socketRef = useRef(null);
-  const listenersRef = useRef([]);
+  const listenersRef = useRef(new Set()); // 🔥 prevent duplicates
   const queueRef = useRef([]);
 
   const [connected, setConnected] = useState(false);
 
-  const getUserId = () => {
+  const getUserId = useCallback(() => {
     try {
       return token ? jwtDecode(token).sub : null;
     } catch {
       return null;
     }
-  };
+  }, [token]);
 
-  const notifyListeners = (data) => {
+  const notifyListeners = useCallback((data) => {
     listenersRef.current.forEach((fn) => fn(data));
-  };
+  }, []);
 
-  const connect = () => {
+  const connect = useCallback(() => {
     const userId = getUserId();
     if (!userId) return;
 
+    // 🔥 prevent duplicate connections
     if (socketRef.current?.readyState === WebSocket.OPEN) return;
 
-    if (
-      socketRef.current &&
-      socketRef.current.readyState !== WebSocket.OPEN
-    ) {
+    // 🔥 hard cleanup old socket before reconnecting
+    if (socketRef.current) {
+      socketRef.current.onopen = null;
+      socketRef.current.onmessage = null;
+      socketRef.current.onerror = null;
+      socketRef.current.onclose = null;
       socketRef.current.close();
       socketRef.current = null;
     }
 
     console.log("WS CONNECTING →", userId);
 
-    const socket = new WebSocket(`ws://192.168.1.194:8000/ws/${userId}`);
+    const socket = new WebSocket(
+      `ws://192.168.1.194:8000/ws/${userId}`
+    );
+
     socketRef.current = socket;
 
     socket.onopen = () => {
@@ -63,36 +70,44 @@ export const SocketProvider = ({ children }) => {
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        const userId = getUserId();
 
-        console.log("WS MESSAGE:", data);
+        const enriched = {
+          ...data,
+          isMe: data.sender_id === userId,
+        };
 
-        // broadcast to all screens
-        notifyListeners(data);
+        notifyListeners(enriched);
       } catch (e) {
         console.log("WS PARSE ERROR", e);
       }
+    };
+
+    socket.onerror = (e) => {
+      console.log("WS ERROR", e);
     };
 
     socket.onclose = () => {
       console.log("WS CLOSED ❌");
       setConnected(false);
     };
+  }, [getUserId, notifyListeners]);
 
-    socket.onerror = (e) => {
-      console.log("WS ERROR", e);
-    };
-  };
-
+  // ================= CONNECT ON LOGIN =================
   useEffect(() => {
     if (loading || !token) return;
 
     connect();
 
     return () => {
-      // only cleanup on real logout
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
     };
-  }, [token, loading]);
+  }, [token, loading, connect]);
 
+  // ================= SEND MESSAGE =================
   const sendMessage = (payload) => {
     const socket = socketRef.current;
 
@@ -103,11 +118,12 @@ export const SocketProvider = ({ children }) => {
     }
   };
 
+  // ================= LISTENERS (NO DUPLICATES) =================
   const addMessageListener = (fn) => {
-    listenersRef.current.push(fn);
+    listenersRef.current.add(fn);
 
     return () => {
-      listenersRef.current = listenersRef.current.filter((f) => f !== fn);
+      listenersRef.current.delete(fn);
     };
   };
 

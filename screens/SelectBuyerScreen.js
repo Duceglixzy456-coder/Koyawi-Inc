@@ -1,19 +1,9 @@
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-} from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
 export default function SelectBuyerScreen({ route, navigation }) {
   const { listing_id } = route.params;
 
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState([]);
+  const { token } = useAuth();
 
   useEffect(() => {
     fetchConversations();
@@ -21,8 +11,6 @@ export default function SelectBuyerScreen({ route, navigation }) {
 
   const fetchConversations = async () => {
     try {
-      const token = await AsyncStorage.getItem("access_token");
-
       const res = await fetch(
         `http://192.168.1.194:8000/conversations/listing/${listing_id}`,
         {
@@ -36,64 +24,58 @@ export default function SelectBuyerScreen({ route, navigation }) {
 
       setConversations(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.log("ERROR loading conversations:", err);
+      console.log("FETCH ERROR:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() =>
-        navigation.navigate("ConfirmSaleScreen", {
-          conversation: item,
-          listing_id,
-        })
-      }
-    >
-      <Text style={styles.title}>Acheteur: {item.buyer_id}</Text>
-
-      <Text style={styles.message}>
-        {item.last_message || "Aucun message"}
-      </Text>
-    </TouchableOpacity>
-  );
+  const handleSelectBuyer = (conversation) => {
+    navigation.navigate("ConfirmSaleScreen", {
+      listing_id,
+      conversation_id: conversation._id,
+      buyer_id: conversation.buyer_id,
+    });
+  };
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
+      <View style={{ flex: 1, justifyContent: "center" }}>
+        <ActivityIndicator />
       </View>
     );
   }
 
-  if (conversations.length === 0) {
+  if (!conversations.length) {
     return (
-      <View style={styles.center}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>Aucun acheteur pour cette annonce</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Sélectionner un acheteur</Text>
+    <FlatList
+      data={conversations}
+      keyExtractor={(item) => item._id}
+      renderItem={({ item }) => (
+        <TouchableOpacity
+          style={{
+            padding: 15,
+            borderBottomWidth: 1,
+            borderColor: "#eee",
+          }}
+          onPress={() => handleSelectBuyer(item)}
+        >
+          <Text style={{ fontWeight: "700" }}>
+            Buyer: {item.buyer_id}
+          </Text>
 
-      <FlatList
-        data={conversations}
-        keyExtractor={(item) => item._id}
-        renderItem={renderItem}
-      />
-    </View>
+          <Text style={{ color: "#666", marginTop: 4 }}>
+            {item.last_message || "No messages"}
+          </Text>
+        </TouchableOpacity>
+      )}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 16 },
-  header: { fontSize: 20, fontWeight: "bold", marginBottom: 12 },
-  card: { padding: 14, borderBottomWidth: 1, borderColor: "#eee" },
-  title: { fontSize: 16, fontWeight: "600" },
-  message: { color: "#666", marginTop: 4 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-});

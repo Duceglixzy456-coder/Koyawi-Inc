@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback,useMemo } from "react";
 import {
   View,
-  Text,
+  Text,Animated,
   TextInput,
   TouchableOpacity,
   FlatList,
@@ -14,10 +14,47 @@ import { Colors } from "../theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../Context/AuthContext";
+const SkeletonCard = () => {
+  const fadeAnim = React.useRef(new Animated.Value(0.3)).current;
 
+  React.useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(fadeAnim, {
+          toValue: 0.7,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0.3,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        width: "48%",
+        height: 200,
+        backgroundColor: "#2a2a2a",
+        borderRadius: 14,
+        marginBottom: 12,
+        opacity: fadeAnim,
+      }}
+    />
+  );
+};
 export default function HomeScreen({ navigation }) {
   const [search, setSearch] = useState("");
   const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState("newest");
   const [showCategories, setShowCategories] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,8 +124,10 @@ const onRefresh = async () => {
   // ---------------- FETCH ----------------
   const fetchListings = useCallback(async () => {
   try {
+    setLoading(true); // ✅ SHOW LOADING
+
     const res = await fetch(
-     "http://192.168.1.194:8000/listings?status=active&skip=0&limit=20"
+      "http://192.168.1.194:8000/listings?status=active&skip=0&limit=20"
     );
 
     const data = await res.json();
@@ -110,6 +149,8 @@ const onRefresh = async () => {
     setListings(normalized);
   } catch (err) {
     console.log("HOME LISTINGS ERROR:", err);
+  } finally {
+    setLoading(false); // ✅ HIDE LOADING (IMPORTANT)
   }
 }, []);
 useFocusEffect(
@@ -171,7 +212,30 @@ const filteredData = useMemo(() => {
     if (!title) return "";
     return title.toUpperCase() + ", INC";
   };
-
+ 
+if (loading) {
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: Colors.background,
+        padding: 10,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+        }}
+      >
+        {Array.from({ length: 6 }).map((_, index) => (
+          <SkeletonCard key={index} />
+        ))}
+      </View>
+    </View>
+  );
+}
   // ---------------- UI ----------------
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>

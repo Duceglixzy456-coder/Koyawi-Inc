@@ -15,12 +15,49 @@ import {
 import { FlatList, Dimensions } from "react-native";
 
 import { useAuth } from "../Context/AuthContext";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { jwtDecode } from "jwt-decode";
 
+
+const SkeletonBox = ({ width, height, style }) => {
+  const opacity = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.7,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.3,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width,
+          height,
+          backgroundColor: "#2a2a2a",
+          borderRadius: 10,
+          opacity,
+        },
+        style,
+      ]}
+    />
+  );
+};
 export default function ListingDetailScreen({ route, navigation }) {
-  const { listing } = route.params;
-  console.log("LISTING:", listing);
+  
+  console.log("CHAT PARAMS:", route.params);
   const images =
   Array.isArray(listing?.images) && listing.images.length > 0
     ? listing.images
@@ -30,17 +67,31 @@ export default function ListingDetailScreen({ route, navigation }) {
     ? [listing.image]
     : [];
   
-  const [loading, setLoading] = useState(true);
+
   const [undoVisible, setUndoVisible] = useState(false);
 const undoRef = useRef(null);
 const sellerId = listing?.owner_id;
-const { token, userId } = useAuth();
-  const [myUserId, setMyUserId] = useState(null);
+const { user } = useAuth();
+const userId = user?._id;
+const { listing: initialListing } = route.params;
+
+const [ setListing] = useState(initialListing);
+const [loading, setLoading] = useState(!initialListing);
+
+ 
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("actions");
-const hasCountedView = useRef(false);
+
  const screenWidth = Dimensions.get("window").width;
 const [views, setViews] = useState(listing?.views || 0);
+const hasCountedView = useRef(false);
+const { listing } = route.params;
+  const isOwner =
+  userId && listing?.owner_id
+    ? String(userId) === String(listing.owner_id)
+    : false;
+    
+
 useEffect(() => {
   if (!listing?._id) return;
   if (hasCountedView.current) return;
@@ -51,58 +102,93 @@ useEffect(() => {
     try {
       await fetch(
         `http://192.168.1.194:8000/listings/${listing._id}/view`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
     } catch (err) {
-      console.log("VIEW COUNT ERROR:", err);
+      console.log("VIEW ERROR:", err);
     }
   };
 
   incrementView();
 }, [listing?._id]);
-  // Decodeif (!listing) {
-useEffect(() => {
-  if (!listing?._id) return;
 
-  let alreadyCounted = false;
+  
+const handleMarkAsSold = async () => {
+  try {
+    if (!listing?._id || !token || !userId) return;
 
-  const markView = async () => {
-    if (alreadyCounted) return;
-    alreadyCounted = true;
-
-    await fetch(
-      `http://192.168.1.194:8000/listings/${listing._id}/view`,
-      { method: "POST" }
+    const res = await fetch(
+      `http://192.168.1.194:8000/listings/${listing._id}/mark-sold`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
     );
-  };
 
-  markView();
-}, [listing?._id]);
+    const data = await res.json();
 
-useEffect(() => {
-    if (!token) return;
-
-    try {
-      const decoded = jwtDecode(token);
-      setMyUserId(decoded.sub);
-    } catch (err) {
-      console.log("JWT ERROR:", err);
+    if (!res.ok) {
+      console.log("SOLD FAILED:", data);
+      return;
     }
-  }, [token]);
-if (!listing) {
-  return (
-    <View style={styles.container}>
-      <Text>Listing not found.</Text>
-    </View>
-  );
-}
+
+    Alert.alert("Success", "Marked as sold");
+    navigation.goBack();
+  } catch (err) {
+    console.log("SOLD ERROR:", err);
+  }
+};
+const handleShareListing = async () => {
+  try {
+    if (!listing?._id) return;
+
+    const url = `myapp://listing/${listing._id}`; 
+    // or replace with your web link if you have one
+
+    await Share.share({
+      message: `${listing.title} - $${listing.price}\n\nCheck it out: ${url}`,
+    });
+
+  } catch (err) {
+    console.log("SHARE ERROR:", err);
+  }
+};
+const handleReportListing = async () => {
+  try {
+    if (!listing?._id || !token || !userId) return;
+
+    const res = await fetch(
+      `http://192.168.1.194:8000/listings/${listing._id}/report`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          reporter_id: userId,
+        }),
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.log("REPORT FAILED:", data);
+      return;
+    }
+
+    Alert.alert("Reported", "Listing has been reported");
+  } catch (err) {
+    console.log("REPORT ERROR:", err);
+  }
+};
  const createConversation = async (prefilledMessage = "") => {
   try {
-    console.log("TOKEN FROM AUTH:", token);
-
-    if (!token || !listing?.owner_id) return;
+    if (!token || !listing?.owner_id || !userId) return;
 
     const response = await fetch(
       "http://192.168.1.194:8000/conversations",
@@ -124,8 +210,11 @@ if (!listing) {
     const conversationId =
       data?.conversation_id || data?._id || data?.id;
 
+    if (!conversationId) return;
+
     navigation.navigate("Chat", {
       conversationId,
+      listingId: listing._id,
       otherUserId: listing.owner_id,
       prefilledMessage,
     });
@@ -136,9 +225,10 @@ if (!listing) {
 };
 const startSellFlow = () => {
   navigation.navigate("SelectBuyerScreen", {
-  listing_id: String(listing._id),
-});
+    listing_id: String(listing._id),
+  });
 };
+
   const deleteListing = () => {
   Alert.alert(
     "Delete Listing?",
@@ -216,8 +306,44 @@ const undoDelete = async (listingId) => {
     userId: listing.owner_id,
   });
 };
+const ListingSkeleton = () => {
+  return (
+    <View style={{ padding: 15 }}>
 
+      {/* BIG IMAGE */}
+      <SkeletonBox width="100%" height={250} style={{ marginBottom: 15 }} />
 
+      {/* TITLE */}
+      <SkeletonBox width="70%" height={20} style={{ marginBottom: 10 }} />
+
+      {/* PRICE */}
+      <SkeletonBox width="40%" height={18} style={{ marginBottom: 20 }} />
+
+      {/* SELLER ROW */}
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
+        <SkeletonBox width={45} height={45} style={{ borderRadius: 25 }} />
+        <View style={{ marginLeft: 10 }}>
+          <SkeletonBox width={120} height={14} style={{ marginBottom: 6 }} />
+          <SkeletonBox width={80} height={12} />
+        </View>
+      </View>
+
+      {/* DESCRIPTION */}
+      <SkeletonBox width="100%" height={12} style={{ marginBottom: 8 }} />
+      <SkeletonBox width="95%" height={12} style={{ marginBottom: 8 }} />
+      <SkeletonBox width="90%" height={12} style={{ marginBottom: 20 }} />
+
+      {/* BUTTON */}
+      <SkeletonBox width="100%" height={45} style={{ borderRadius: 12 }} />
+    </View>
+  );
+};
+// ---------------- LOADING STATE ----------------
+if (loading) {
+  return <ListingSkeleton />;
+}
+
+// ---------------- MAIN UI ----------------
 return (
   <View style={styles.container}>
 
@@ -376,49 +502,46 @@ return (
       )}
 
      {/* MORE TAB */}
-      {activeTab === "more" && (
-        <View style={styles.tabBox}>
-          <Text style={styles.tabTitle}>More Options</Text>
+     {activeTab === "more" && (
+  <View style={styles.tabBox}>
+    <Text style={styles.tabTitle}>More Options</Text>
 
-          {myUserId && listing.owner_id === myUserId ? (
-            <>
-            <TouchableOpacity
-  style={[
-    styles.menuItem,
-    { opacity: 0.85 }
-  ]}
-  onPress={startSellFlow}
->
-  <Text style={{ fontWeight: "600" }}>
-    Mark as sold
-  </Text>
-</TouchableOpacity>
-              <TouchableOpacity style={styles.menuItem}>
-                <Text>Edit Listing</Text>
-              </TouchableOpacity>
+    {userId && listing?.owner_id === userId ? (
+      <>
+        <TouchableOpacity
+          style={[styles.menuItem, { opacity: 0.85 }]}
+          onPress={handleMarkAsSold}
+        >
+          <Text style={{ fontWeight: "600" }}>Mark as sold</Text>
+        </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.menuItem, { borderBottomWidth: 0 }]}
-                onPress={deleteListing}
-              >
-                <Text style={{ color: "red" }}>Delete Listing</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <TouchableOpacity style={styles.menuItem}>
-                <Text>Report Listing</Text>
-              </TouchableOpacity>
+        <TouchableOpacity style={styles.menuItem} onPress={handleEditListing}>
+          <Text>Edit Listing</Text>
+        </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.menuItem, { borderBottomWidth: 0 }]}
-              >
-                <Text>Share Listing</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      )}
+        <TouchableOpacity
+          style={[styles.menuItem, { borderBottomWidth: 0 }]}
+          onPress={deleteListing}
+        >
+          <Text style={{ color: "red" }}>Delete Listing</Text>
+        </TouchableOpacity>
+      </>
+    ) : (
+      <>
+        <TouchableOpacity style={styles.menuItem} onPress={handleReportListing}>
+          <Text>Report Listing</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuItem, { borderBottomWidth: 0 }]}
+          onPress={handleShareListing}
+        >
+          <Text>Share Listing</Text>
+        </TouchableOpacity>
+      </>
+    )}
+  </View>
+)}
 
       <View style={{ height: 40 }} />
     </ScrollView>
