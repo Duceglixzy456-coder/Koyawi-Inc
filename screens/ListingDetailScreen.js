@@ -3,16 +3,19 @@ import {
   View,
   Text,
   TextInput,
+  Alert,
+  Share,
   TouchableOpacity,
   ScrollView,
   Image,
   KeyboardAvoidingView,
   Platform,
+  Animated,
   StyleSheet,
   Keyboard,
 } from "react-native";
  
-import { FlatList, Dimensions } from "react-native";
+import { Dimensions } from "react-native";
 
 import { useAuth } from "../Context/AuthContext";
 
@@ -56,42 +59,45 @@ const SkeletonBox = ({ width, height, style }) => {
   );
 };
 export default function ListingDetailScreen({ route, navigation }) {
-  
-  console.log("CHAT PARAMS:", route.params);
-  const images =
-  Array.isArray(listing?.images) && listing.images.length > 0
-    ? listing.images
-    : listing?.coverImage
-    ? [listing.coverImage]
-    : listing?.image
-    ? [listing.image]
-    : [];
-  
-
-  const [undoVisible, setUndoVisible] = useState(false);
-const undoRef = useRef(null);
-const sellerId = listing?.owner_id;
-const { user } = useAuth();
-const userId = user?._id;
-const { listing: initialListing } = route.params;
-
-const [ setListing] = useState(initialListing);
-const [loading, setLoading] = useState(!initialListing);
+  const { listing: initialListing } = route.params;
 
  
+ const { user, token, loading: authLoading } = useAuth();
+
+const userId = user?.id;
+if (authLoading || !token) return <ListingSkeleton />;
+
+  const [listing, setListing] = useState(initialListing);
+  const [loading, setLoading] = useState(!initialListing);
+
+  const [undoVisible, setUndoVisible] = useState(false);
+  const undoRef = useRef(null);
+const viewOnly = route.params?.viewOnly;
+  const sellerId = listing?.owner_id;
+
+  const isOwner =
+  userId && sellerId && String(userId) === String(sellerId);
+
+  console.log("CHAT PARAMS:", route.params);
+  console.log("USER ID:", userId);
+  console.log("OWNER ID:", sellerId);
+  console.log("IS OWNER:", isOwner);
+
+  const images =
+    Array.isArray(listing?.images) && listing.images.length > 0
+      ? listing.images
+      : listing?.coverImage
+      ? [listing.coverImage]
+      : listing?.image
+      ? [listing.image]
+      : [];
+
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("actions");
-
- const screenWidth = Dimensions.get("window").width;
-const [views, setViews] = useState(listing?.views || 0);
-const hasCountedView = useRef(false);
-const { listing } = route.params;
-  const isOwner =
-  userId && listing?.owner_id
-    ? String(userId) === String(listing.owner_id)
-    : false;
-    
-
+const [conversationId, setConversationId] = useState(null);
+  const screenWidth = Dimensions.get("window").width;
+  const [views, setViews] = useState(listing?.views || 0);
+  const hasCountedView = useRef(false);
 useEffect(() => {
   if (!listing?._id) return;
   if (hasCountedView.current) return;
@@ -112,11 +118,57 @@ useEffect(() => {
   incrementView();
 }, [listing?._id]);
 
-  
-const handleMarkAsSold = async () => {
+  const fetchListingConversations = async () => {
   try {
-    if (!listing?._id || !token || !userId) return;
+    if (!token || !listing?._id) return [];
 
+    const res = await fetch(
+      `http://192.168.1.194:8000/conversations/listing/${listing._id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.log("FETCH CONVOS ERROR:", err);
+    return [];
+  }
+};
+
+const handleMarkAsSoldPress = async () => {
+  try {
+    const convos = await fetchListingConversations();
+
+    if (!convos.length) {
+      Alert.alert("No buyers yet", "No conversations found for this listing.");
+      return;
+    }
+
+    if (convos.length === 1) {
+      return handleMarkAsSold(convos[0]._id);
+    }
+
+    Alert.alert(
+      "Select Buyer",
+      "Choose who bought this item",
+      convos.map((c) => ({
+        text: c.last_message
+          ? `“${c.last_message.slice(0, 25)}...”`
+          : "Buyer",
+        onPress: () => handleMarkAsSold(c._id),
+      }))
+    );
+  } catch (err) {
+    console.log("MARK AS SOLD PRESS ERROR:", err);
+  }
+};
+
+const handleMarkAsSold = async (conversationId) => {
+  try {
     const res = await fetch(
       `http://192.168.1.194:8000/listings/${listing._id}/mark-sold`,
       {
@@ -125,6 +177,9 @@ const handleMarkAsSold = async () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+        }),
       }
     );
 
@@ -133,29 +188,28 @@ const handleMarkAsSold = async () => {
     if (!res.ok) {
       console.log("SOLD FAILED:", data);
       return;
+      console.log("MARKING SOLD FOR:", conversationId);
     }
 
     Alert.alert("Success", "Marked as sold");
-    navigation.goBack();
   } catch (err) {
     console.log("SOLD ERROR:", err);
   }
 };
+
+
 const handleShareListing = async () => {
   try {
-    if (!listing?._id) return;
-
-    const url = `myapp://listing/${listing._id}`; 
-    // or replace with your web link if you have one
+    const url = `myapp://listing/${listing._id}`;
 
     await Share.share({
-      message: `${listing.title} - $${listing.price}\n\nCheck it out: ${url}`,
+      message: `${listing.title} - $${listing.price}\n\n${url}`,
     });
-
   } catch (err) {
     console.log("SHARE ERROR:", err);
   }
 };
+
 const handleReportListing = async () => {
   try {
     if (!listing?._id || !token || !userId) return;
@@ -165,7 +219,6 @@ const handleReportListing = async () => {
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
@@ -181,7 +234,7 @@ const handleReportListing = async () => {
       return;
     }
 
-    Alert.alert("Reported", "Listing has been reported");
+    Alert.alert("Reported", "Listing reported");
   } catch (err) {
     console.log("REPORT ERROR:", err);
   }
@@ -207,13 +260,14 @@ const handleReportListing = async () => {
 
     const data = await response.json();
 
-    const conversationId =
-      data?.conversation_id || data?._id || data?.id;
+    const id = data?.conversation_id || data?._id || data?.id;
 
-    if (!conversationId) return;
+    if (!id) return;
+
+    setConversationId(id); // 🔥 THIS IS WHAT WAS MISSING
 
     navigation.navigate("Chat", {
-      conversationId,
+      conversationId: id,
       listingId: listing._id,
       otherUserId: listing.owner_id,
       prefilledMessage,
@@ -223,13 +277,8 @@ const handleReportListing = async () => {
     console.log("CONVO ERROR:", err);
   }
 };
-const startSellFlow = () => {
-  navigation.navigate("SelectBuyerScreen", {
-    listing_id: String(listing._id),
-  });
-};
 
-  const deleteListing = () => {
+ const deleteListing = () => {
   Alert.alert(
     "Delete Listing?",
     "This will hide your listing. You can undo this for 5 minutes.",
@@ -250,17 +299,28 @@ const startSellFlow = () => {
               }
             );
 
-            const data = await res.json();
+            // 🔥 SAFE RESPONSE HANDLING
+            let data = null;
+
+            const text = await res.text();
+
+            try {
+              data = text ? JSON.parse(text) : null;
+            } catch (e) {
+              data = text; // fallback if not JSON
+            }
 
             if (!res.ok) {
-              console.log("DELETE FAILED:", data);
+              console.log("DELETE FAILED:", data || res.status);
               return;
             }
 
-            // ---------------- SHOW UNDO BAR ----------------
-            showUndoToast(listing._id);
+            // success
+            console.log("DELETE SUCCESS:", data);
 
+            showUndoToast(listing._id);
             navigation.goBack();
+
           } catch (err) {
             console.log("DELETE ERROR:", err);
           }
@@ -309,17 +369,10 @@ const undoDelete = async (listingId) => {
 const ListingSkeleton = () => {
   return (
     <View style={{ padding: 15 }}>
-
-      {/* BIG IMAGE */}
       <SkeletonBox width="100%" height={250} style={{ marginBottom: 15 }} />
-
-      {/* TITLE */}
       <SkeletonBox width="70%" height={20} style={{ marginBottom: 10 }} />
-
-      {/* PRICE */}
       <SkeletonBox width="40%" height={18} style={{ marginBottom: 20 }} />
 
-      {/* SELLER ROW */}
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
         <SkeletonBox width={45} height={45} style={{ borderRadius: 25 }} />
         <View style={{ marginLeft: 10 }}>
@@ -328,16 +381,15 @@ const ListingSkeleton = () => {
         </View>
       </View>
 
-      {/* DESCRIPTION */}
       <SkeletonBox width="100%" height={12} style={{ marginBottom: 8 }} />
       <SkeletonBox width="95%" height={12} style={{ marginBottom: 8 }} />
       <SkeletonBox width="90%" height={12} style={{ marginBottom: 20 }} />
 
-      {/* BUTTON */}
       <SkeletonBox width="100%" height={45} style={{ borderRadius: 12 }} />
     </View>
   );
 };
+
 // ---------------- LOADING STATE ----------------
 if (loading) {
   return <ListingSkeleton />;
@@ -346,7 +398,6 @@ if (loading) {
 // ---------------- MAIN UI ----------------
 return (
   <View style={styles.container}>
-
     {/* BACK BUTTON LAYER (MUST BE FIRST) */}
     <View style={styles.backLayer}>
       <TouchableOpacity
@@ -365,83 +416,78 @@ return (
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 40 }}
     >
-      {/* IMAGE */}
-   <ScrollView
-  horizontal
-  pagingEnabled
-  showsHorizontalScrollIndicator={false}
-  style={{ width: "100%", height: 320 }}
-  onMomentumScrollEnd={(event) => {
-    const index = Math.round(
-     event.nativeEvent.contentOffset.x / screenWidth
-    );
-    setActiveIndex(index);
-  }}
->
-  {images.map((img, index) => (
-   <Image
-  key={index}
-  source={{ uri: img }}
-  style={{
-    width: screenWidth,
-    height: 320,
-    resizeMode: "cover",
-  }}
-/>
-  ))}
-</ScrollView>
-<View
-  style={{
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 10,
-  }}
->
-  {images.map((_, index) => {
-    const active = index === activeIndex;
-
-    return (
-      <View
-        key={index}
-        style={{
-          width: active ? 10 : 6,
-          height: active ? 10 : 6,
-          borderRadius: 5,
-          marginHorizontal: 4,
-          backgroundColor: active ? "#000" : "#bbb",
+      {/* IMAGE SCROLLER */}
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={{ width: "100%", height: 320 }}
+        onMomentumScrollEnd={(event) => {
+          const index = Math.round(
+            event.nativeEvent.contentOffset.x / screenWidth
+          );
+          setActiveIndex(index);
         }}
-      />
-    );
-  })}
-</View>
+      >
+        {images.map((img, index) => (
+          <Image
+            key={index}
+            source={{ uri: img }}
+            style={{
+              width: screenWidth,
+              height: 320,
+              resizeMode: "cover",
+            }}
+          />
+        ))}
+      </ScrollView>
+
+      {/* DOT INDICATORS */}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "center",
+          marginTop: 10,
+        }}
+      >
+        {images.map((_, index) => {
+          const active = index === activeIndex;
+
+          return (
+            <View
+              key={index}
+              style={{
+                width: active ? 10 : 6,
+                height: active ? 10 : 6,
+                borderRadius: 5,
+                marginHorizontal: 4,
+                backgroundColor: active ? "#000" : "#bbb",
+              }}
+            />
+          );
+        })}
+      </View>
+
       {/* INFO CARD */}
       <View style={styles.card}>
-  <Text style={styles.title}>{listing.title}</Text>
+        <Text style={styles.title}>{listing.title}</Text>
 
-  {/* PRICE + VIEWS ROW */}
-  <View style={styles.priceRow}>
-    <Text style={styles.price}>${listing.price}</Text>
-
-    <Text style={styles.views}>
-      VUES {views}
-    </Text>
-  </View>
-</View>
+        <View style={styles.priceRow}>
+          <Text style={styles.price}>${listing.price}</Text>
+          <Text style={styles.views}>VUES {views}</Text>
+        </View>
+      </View>
 
       {/* DESCRIPTION */}
       <View style={styles.section}>
-       <Text style={styles.sectionText}>
-  {listing.description || "No description provided by seller"}
-</Text>
+        <Text style={styles.sectionText}>
+          {listing.description || "No description provided by seller"}
+        </Text>
       </View>
 
-      {/* ================= ACTION BAR ================= */}
+      {/* ACTION BAR */}
       <View style={styles.actionBar}>
-
-        <TouchableOpacity
-          onPress={goToSellerProfile}
-          style={styles.actionItem}
-        >
+        <TouchableOpacity onPress={goToSellerProfile} style={styles.actionItem}>
           <Text style={styles.actionText}>Profile</Text>
         </TouchableOpacity>
 
@@ -462,91 +508,89 @@ return (
         >
           <Text style={styles.actionText}>More</Text>
         </TouchableOpacity>
-
       </View>
 
-      {/* ================= MESSAGE TAB ================= */}
+      {/* MESSAGE TAB */}
       {activeTab === "message" && (
         <View style={styles.tabBox}>
-
           <Text style={styles.tabTitle}>Messages rapides</Text>
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() =>
-              createConversation("Bonjour 👋 Je suis intéressé")
-            }
+            onPress={() => createConversation("Bonjour 👋 Je suis intéressé")}
           >
             <Text>Bonjour 👋 Je suis intéressé</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() =>
-              createConversation("Est-ce toujours disponible ?")
-            }
+            onPress={() => createConversation("Est-ce toujours disponible ?")}
           >
             <Text>Est-ce toujours disponible ?</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.menuItem, { borderBottomWidth: 0 }]}
-            onPress={() =>
-              createConversation("Où êtes-vous situé ?")
-            }
+            onPress={() => createConversation("Où êtes-vous situé ?")}
           >
             <Text>Où êtes-vous situé ?</Text>
           </TouchableOpacity>
-
         </View>
       )}
 
-     {/* MORE TAB */}
-     {activeTab === "more" && (
-  <View style={styles.tabBox}>
-    <Text style={styles.tabTitle}>More Options</Text>
+      {/* MORE TAB */}
+      {activeTab === "more" && (
+        <View style={styles.tabBox}>
+          <Text style={styles.tabTitle}>More Options</Text>
 
-    {userId && listing?.owner_id === userId ? (
-      <>
-        <TouchableOpacity
-          style={[styles.menuItem, { opacity: 0.85 }]}
-          onPress={handleMarkAsSold}
-        >
-          <Text style={{ fontWeight: "600" }}>Mark as sold</Text>
-        </TouchableOpacity>
+          {isOwner && !viewOnly ? (
+            <>
+              <TouchableOpacity
+  style={styles.menuItem}
+  onPress={() =>
+    navigation.navigate("SelectBuyer", {
+      listingId: listing._id,
+    })
+  }
+>
+  <Text style={{ fontWeight: "600" }}>Mark as Sold</Text>
+</TouchableOpacity>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={handleShareListing}
+              >
+                <Text>Share Listing</Text>
+              </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem} onPress={handleEditListing}>
-          <Text>Edit Listing</Text>
-        </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.menuItem, { borderBottomWidth: 0 }]}
+                onPress={deleteListing}
+              >
+                <Text style={{ color: "red" }}>Delete Listing</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={handleShareListing}
+              >
+                <Text>Share Listing</Text>
+              </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.menuItem, { borderBottomWidth: 0 }]}
-          onPress={deleteListing}
-        >
-          <Text style={{ color: "red" }}>Delete Listing</Text>
-        </TouchableOpacity>
-      </>
-    ) : (
-      <>
-        <TouchableOpacity style={styles.menuItem} onPress={handleReportListing}>
-          <Text>Report Listing</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.menuItem, { borderBottomWidth: 0 }]}
-          onPress={handleShareListing}
-        >
-          <Text>Share Listing</Text>
-        </TouchableOpacity>
-      </>
-    )}
-  </View>
-)}
-
-      <View style={{ height: 40 }} />
+              <TouchableOpacity
+                style={[styles.menuItem, { borderBottomWidth: 0 }]}
+                onPress={handleReportListing}
+              >
+                <Text>Report Listing</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
     </ScrollView>
 
-    {/* ================= UNDO BANNER (GLOBAL OVERLAY) ================= */}
+    {/* UNDO BANNER (OUTSIDE SCROLLVIEW) */}
     {undoVisible && (
       <View
         style={{
@@ -569,19 +613,17 @@ return (
           Listing will be deleted
         </Text>
 
-        <TouchableOpacity onPress={undoDelete}>
+        <TouchableOpacity onPress={() => undoDelete(listing?._id)}>
           <Text style={{ color: "#00ff99", fontWeight: "700" }}>
             UNDO
           </Text>
         </TouchableOpacity>
       </View>
     )}
-
   </View>
 );
 }
 /* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,

@@ -31,32 +31,24 @@ const otherUserId = route?.params?.otherUserId;
 const listingTitle = route?.params?.listingTitle;
 const otherUserName = route?.params?.otherUserName;
   const [conversations, setConversations] = useState([]);
+ 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState(null);
+  
 const { addMessageListener } = useSocket();
 
-const { token } = useAuth();
-  // ================= GET USER =================
-  useEffect(() => {
-  if (!token) return;
-
-  const decoded = jwtDecode(token);
-  setCurrentUserId(decoded.sub);
-}, [token]);
+const { user, token } = useAuth();
+const currentUserId = user?.id;
 
   // ================= FETCH INBOX =================
 const fetchInbox = useCallback(async () => {
   try {
-    if (!token) return;
+    if (!token || !currentUserId) return;
 
     setLoading(true);
 
-    const decoded = jwtDecode(token);
-    const userId = decoded.sub;
-
     const res = await fetch(
-      `http://192.168.1.194:8000/conversations/${userId}`,
+      `http://192.168.1.194:8000/conversations/${currentUserId}`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -74,11 +66,7 @@ const fetchInbox = useCallback(async () => {
   } finally {
     setLoading(false);
   }
-}, [token]);
-useEffect(() => {
-  if (!token) return;
-  fetchInbox();
-}, [fetchInbox]);
+}, [token, currentUserId]);
   // ================= REFRESH =================
 const onRefresh = async () => {
   setRefreshing(true);
@@ -269,9 +257,10 @@ if (!token) return;
       ? item.coverImage
       : null;
 
- const unread = Number(
-  item?.unread_counts?.[currentUserId] ?? 0
-);
+ const unread =
+  currentUserId && item?.unread_counts?.[currentUserId]
+    ? Number(item.unread_counts[currentUserId])
+    : 0;
 
   const isLastMessageMine = item.last_sender_id === currentUserId;
 
@@ -279,12 +268,11 @@ if (!token) return;
     <TouchableOpacity
       onPress={() => {
         navigation.navigate("Chat", {
-          conversationId: item._id,
-          otherUserId,
-          listingId: item.listing_id,
-          listingTitle: item.listing_title,
-          otherUserName,
-        });
+  conversationId: item._id,
+  listingId: item.listing_id,
+  otherUserId:
+  item.buyer_id === currentUserId ? item.seller_id : item.buyer_id,
+});
       }}
       onLongPress={() => handleLongPressConversation(item._id)}
       delayLongPress={400}

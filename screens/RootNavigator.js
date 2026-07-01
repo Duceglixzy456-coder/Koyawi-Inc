@@ -20,7 +20,7 @@ import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
 import SessionExpiredScreen from "./SessionExpiredScreen";
 import ChatScreen from "./ChatScreen";
 import SelectBuyerScreen from "../screens/SelectBuyerScreen";
-import ConfirmSaleScreen from "../screens/ConfirmSaleScreen";
+import SoldListingsScreen from "../screens/SoldListingsScreen";
 
 import { SocketProvider } from "../realtime/SocketContext";
 
@@ -48,15 +48,14 @@ function AppStack() {
       <Stack.Screen name="BoostListingDetail" component={BoostListingDetailScreen} />
       <Stack.Screen name="SessionExpired" component={SessionExpiredScreen} />
       <Stack.Screen name="ChatScreen" component={ChatScreen} />
-      <Stack.Screen
-  name="SelectBuyerScreen"
-  component={SelectBuyerScreen}
-/>
+      <Stack.Screen name="SelectBuyer" component={SelectBuyerScreen} />
 
-<Stack.Screen
-  name="ConfirmSaleScreen"
-  component={ConfirmSaleScreen}
-/>
+      {/* ✅ FIXED SOLD + LISTING DETAIL SCREENS */}
+      <Stack.Screen
+        name="SoldListingsScreen"
+        component={SoldListingsScreen}
+      />
+
       <Stack.Screen
         name="ListingDetailScreen"
         component={ListingDetailScreen}

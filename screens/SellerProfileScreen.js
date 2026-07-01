@@ -73,9 +73,8 @@ const getImages = (item) => {
 const fetchSellerListings = async (id) => {
   try {
     const res = await fetch(
-      `http://192.168.1.194:8000/listings?status=active`
-    );
-
+  `http://192.168.1.194:8000/listings`
+);
     const data = await res.json();
 
     const normalized = data
@@ -280,7 +279,7 @@ useEffect(() => {
   });
 
   return unsubscribe;
-}, [navigation, profileUserId]);
+}, [navigation, profileUserId, fetchSellerListings]);
  
 const markLocalSold = (listingId) => {
   setListings((prev) =>
@@ -341,12 +340,11 @@ const toggleFollow = async () => {
 }
 const tabLabels = {
   listings: t?.listings || "Listings",
-  sold: "Sold",
+ 
   about: t?.about || "About",
   more: t?.more || "More",
   boost: "Boost",
 };
-
  const renderAbout = () => {
   const activeListings = listings?.filter(
     (item) => item?.status === "active"
@@ -532,8 +530,6 @@ const renderBoost = () => {
 const filteredListings =
   activeTab === "listings"
     ? listings.filter((item) => item.status === "active")
-    : activeTab === "sold"
-    ? listings.filter((item) => item.status === "sold")
     : [];
 
 return (
@@ -615,7 +611,18 @@ return (
         <Text style={[styles.name, { textAlign: "center" }]}>
           {user.full_name}
         </Text>
-
+{isOwner && (
+  <TouchableOpacity
+    onPress={() =>
+      navigation.navigate("SoldListingsScreen", {
+        userId: profileUserId,
+      })
+    }
+    style={styles.soldMiniButton}
+  >
+    <Text style={styles.soldMiniText}>SOLD</Text>
+  </TouchableOpacity>
+)}
         {/* FOLLOW */}
         {!isOwner && (
           <TouchableOpacity
@@ -630,6 +637,7 @@ return (
 
         {/* TABS */}
         <View style={styles.tabRow}>
+          
           {Object.keys(tabLabels)
             .filter((tab) => !(tab === "boost" && !isOwner))
             .map((tab) => (
@@ -650,6 +658,7 @@ return (
         </View>
       </View>
     )}
+    
 
     renderItem={({ item }) => {
       console.log("TITLE:", item.title);
@@ -955,4 +964,21 @@ bioEditText: {
   color: "#007AFF",
   fontWeight: "600",
 },
+
+soldMiniButton: {
+  marginTop: 10,
+  alignSelf: "center",
+  backgroundColor: "#111",
+  paddingHorizontal: 14,
+  paddingVertical: 0.5,
+  borderRadius: 20,
+},
+
+soldMiniText: {
+  color: "#fff",
+  fontSize: 11,
+  fontWeight: "700",
+},
+
+
 });

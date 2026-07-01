@@ -41,12 +41,13 @@ export default function ChatScreen({ route, navigation }) {
 const [showScrollButton, setShowScrollButton] = useState(false);
 const flatListRef = useRef(null);
 const [newMessageCount, setNewMessageCount] = useState(0);
-const { token } = useAuth();
+
 const [isAtBottom, setIsAtBottom] = useState(true);
 const [loadingMessages, setLoadingMessages] = useState(true);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState(prefilledMessage || "");
-  const [currentUserId, setCurrentUserId] = useState(null);
+const { token, userId } = useAuth();
+const currentUserId = userId;
   const chatTitle =
   route?.params?.otherUserName && listingTitle
     ? `${route.params.otherUserName} • ${listingTitle}`
@@ -63,12 +64,7 @@ useEffect(() => {
     }
   );
 }, [conversationId, currentUserId]);
-// ---------------- USER ID ----------------
-useEffect(() => {
-  if (!token) return;
 
-  setCurrentUserId(jwtDecode(token).sub);
-}, [token]);
   // ---------------- LOAD MESSAGES ----------------
 const loadMessages = async () => {
   if (!conversationId || !token) return;
