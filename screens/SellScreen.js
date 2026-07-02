@@ -12,12 +12,10 @@ import {
 } from "react-native";
 
 import * as ImagePicker from "expo-image-picker";
-import { useAuth } from "../Context/AuthContext";
 import { Colors } from "../theme/colors";
+import { apiFetch } from "../api/apiClient";
 
 function SellScreen({ navigation }) {
-  const { token } = useAuth();
-
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
@@ -34,27 +32,28 @@ function SellScreen({ navigation }) {
   ];
 
   // ---------------- PICK IMAGE ----------------
- const pickImage = async () => {
-  try {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,   // ✅ THIS IS THE KEY
-      selectionLimit: 5,               // ✅ max 5 photos
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      const uris = result.assets.map((asset) => asset.uri);
-
-      setImages((prev) => {
-        const combined = [...prev, ...uris];
-        return combined.slice(0, 5); // hard cap at 5
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        selectionLimit: 5,
+        quality: 1,
       });
+
+      if (!result.canceled) {
+        const uris = result.assets.map((asset) => asset.uri);
+
+        setImages((prev) => {
+          const combined = [...prev, ...uris];
+          return combined.slice(0, 5);
+        });
+      }
+    } catch (err) {
+      console.log("IMAGE PICK ERROR:", err);
     }
-  } catch (err) {
-    console.log("IMAGE PICK ERROR:", err);
-  }
-};
+  };
+
   // ---------------- REMOVE IMAGE ----------------
   const removeImage = (index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
@@ -63,10 +62,8 @@ function SellScreen({ navigation }) {
   // ---------------- CREATE LISTING ----------------
   const createListing = async () => {
     try {
-      if (!token) return alert("Please login again");
-
-      if (!title || !price || !description || !images?.length) {
-        alert("Please fill all fields and add an image.");
+      if (!title || !price || !description || images.length === 0) {
+        alert("Please fill all fields and add images.");
         return;
       }
 
@@ -80,11 +77,12 @@ function SellScreen({ navigation }) {
 
       const formData = new FormData();
 
-      formData.append("title", title);
+      formData.append("title", title.trim());
       formData.append("price", cleanPrice);
-      formData.append("description", description);
+      formData.append("description", description.trim());
       formData.append("category", category);
 
+      // IMPORTANT: backend expects "files"
       images.forEach((img, index) => {
         formData.append("files", {
           uri: img,
@@ -93,22 +91,28 @@ function SellScreen({ navigation }) {
         });
       });
 
-      const res = await fetch("http://192.168.1.194:8000/listings", {
+      const res = await apiFetch("/listings", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          // DO NOT set Content-Type for FormData
         },
         body: formData,
       });
 
-      const data = await res.json();
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
 
       if (!res.ok) {
         console.log("UPLOAD ERROR:", data);
-        alert(data.detail || "Failed to post listing");
+        alert(data?.detail || "Failed to post listing");
         return;
       }
 
+      // reset
       setTitle("");
       setPrice("");
       setDescription("");
@@ -154,7 +158,6 @@ function SellScreen({ navigation }) {
             overflow: "hidden",
           }}
         >
-          {/* TAP AREA */}
           <TouchableOpacity
             onPress={pickImage}
             style={{
@@ -168,17 +171,11 @@ function SellScreen({ navigation }) {
               zIndex: images.length === 0 ? 10 : 0,
             }}
           >
-            {images.length === 0 && (
-              <Text>Tap to add photo</Text>
-            )}
+            {images.length === 0 && <Text>Tap to add photo</Text>}
           </TouchableOpacity>
 
-          {/* IMAGE SCROLLER */}
           {images.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {images.map((img, index) => (
                 <View key={index} style={{ position: "relative" }}>
                   <Image
@@ -191,7 +188,6 @@ function SellScreen({ navigation }) {
                     }}
                   />
 
-                  {/* REMOVE */}
                   <TouchableOpacity
                     onPress={() => removeImage(index)}
                     style={{
@@ -203,9 +199,7 @@ function SellScreen({ navigation }) {
                       padding: 5,
                     }}
                   >
-                    <Text style={{ color: "#fff", fontSize: 12 }}>
-                      X
-                    </Text>
+                    <Text style={{ color: "#fff", fontSize: 12 }}>X</Text>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -257,12 +251,7 @@ function SellScreen({ navigation }) {
                   backgroundColor: active ? "#111" : "#eee",
                 }}
               >
-                <Text
-                  style={{
-                    color: active ? "#fff" : "#333",
-                    fontWeight: "600",
-                  }}
-                >
+                <Text style={{ color: active ? "#fff" : "#333" }}>
                   {item}
                 </Text>
               </TouchableOpacity>
@@ -273,12 +262,14 @@ function SellScreen({ navigation }) {
         {/* SUBMIT */}
         <TouchableOpacity
           onPress={createListing}
+          disabled={loading}
           style={{
             marginTop: 10,
             backgroundColor: Colors.primary,
             padding: 15,
             borderRadius: 10,
             alignItems: "center",
+            opacity: loading ? 0.6 : 1,
           }}
         >
           {loading ? (

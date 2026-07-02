@@ -22,15 +22,18 @@ export default function SelectBuyerScreen({ route, navigation }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(
-          `http://192.168.1.194:8000/conversations/listing/${listingId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+       const res = await apiFetch(`/conversations/listing/${listingId}`);
+       const text = await res.text();
 
-        const data = await res.json();
-        setConvos(Array.isArray(data) ? data : []);
+let data = [];
+try {
+  data = JSON.parse(text);
+} catch (e) {
+  console.log("BAD CONVO RESPONSE:", text);
+  data = [];
+}
+
+setConvos(Array.isArray(data) ? data : []);
       } catch (err) {
         console.log("FETCH ERROR:", err);
         setConvos([]);
@@ -149,7 +152,7 @@ export default function SelectBuyerScreen({ route, navigation }) {
 
               <View style={{ flex: 1 }}>
                 <Text style={styles.buyerText}>
-                  {c.buyer?.name || "Unknown Buyer"}
+                  {c.buyer?.name || c.buyer_id || "Unknown Buyer"}
                 </Text>
 
                 <Text style={styles.message} numberOfLines={1}>
@@ -158,7 +161,7 @@ export default function SelectBuyerScreen({ route, navigation }) {
               </View>
 
               <Text style={styles.time}>
-                {formatTime(c.last_message_time)}
+                formatTime(c.updated_at || c.last_message_time)
               </Text>
             </View>
           </TouchableOpacity>

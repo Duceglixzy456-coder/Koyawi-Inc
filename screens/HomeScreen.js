@@ -8,7 +8,7 @@ import {
   Image,
 } from "react-native";
 
-
+import { apiFetch } from "../api/apiClient";
 import { jwtDecode } from "jwt-decode";
 import { Colors } from "../theme/colors";
 import { Ionicons } from "@expo/vector-icons";
@@ -126,9 +126,9 @@ const onRefresh = async () => {
   try {
     setLoading(true); // ✅ SHOW LOADING
 
-    const res = await fetch(
-      "http://192.168.1.194:8000/listings?status=active&skip=0&limit=20"
-    );
+   const res = await apiFetch(
+  "/listings?status=active&skip=0&limit=20"
+);
 
     const data = await res.json();
 

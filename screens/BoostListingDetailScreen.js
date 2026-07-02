@@ -10,111 +10,97 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Linking } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { apiFetch } from "../api/apiClient";
 
 export default function BoostListingDetailScreen({ navigation, route }) {
-  const { listing } = route.params;
+  const { listing } = route.params || {};
   const [loading, setLoading] = useState(false);
-
   const [selectedPlan, setSelectedPlan] = useState(null);
-  
- const openWhatsApp = (plan) => {
-  const phoneNumber = "13472798416";
 
-  const message = `Bonjour l’équipe KOYAWI 👋
+  const listingImage =
+    (Array.isArray(listing?.images) && listing.images[0]) ||
+    listing?.image ||
+    listing?.coverImage ||
+    "https://via.placeholder.com/100";
+
+  const openWhatsApp = (plan) => {
+    const phoneNumber = "13472798416";
+
+    const message = `Bonjour l’équipe KOYAWI 👋
 
 Je souhaite booster mon annonce :
 
-📦 Titre : ${listing.title}
-💰 Prix : ${listing.price}
-⏳ Plan : ${plan.label}
-🆔 ID : ${listing._id}`;
+📦 Titre : ${listing?.title || ""}
+💰 Prix : ${listing?.price || ""}
+⏳ Plan : ${plan?.label || ""}
+🆔 ID : ${listing?._id || ""}`;
 
-  const url = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+    const url = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(
+      message
+    )}`;
 
-  Alert.alert(
-    "Contacter le support",
-    "Vous allez être redirigé vers WhatsApp pour finaliser votre demande de boost.",
-    [
-      {
-        text: "Annuler",
-        style: "cancel",
-      },
-      {
-        text: "Continuer",
-        onPress: async () => {
-          try {
-            const canOpen = await Linking.canOpenURL(url);
-
-            if (canOpen) {
-              await Linking.openURL(url);
-            } else {
-              console.log("Impossible d’ouvrir WhatsApp");
+    Alert.alert(
+      "Contacter le support",
+      "Vous allez être redirigé vers WhatsApp pour finaliser votre demande de boost.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Continuer",
+          onPress: async () => {
+            try {
+              const canOpen = await Linking.canOpenURL(url);
+              if (canOpen) await Linking.openURL(url);
+            } catch (err) {
+              console.log("WHATSAPP ERROR:", err);
             }
-          } catch (err) {
-            console.log("ERREUR WHATSAPP :", err);
-          }
+          },
         },
-      },
-    ]
-  );
-};
-  
-   const handleBoost = async () => {
-  if (!selectedPlan) return;
+      ]
+    );
+  };
 
-  try {
-    setLoading(true);
+  const handleBoost = async () => {
+    if (!selectedPlan || !listing?._id) return;
 
-    const token = await AsyncStorage.getItem("access_token");
+    try {
+      setLoading(true);
 
-    if (!token) {
-      console.log("NO TOKEN");
-      return;
-    }
-
-    const res = await fetch(
-      `http://192.168.1.194:8000/boost/${listing._id}`,
-      {
+      const res = await apiFetch(`/boost/${listing._id}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           days: selectedPlan.days,
           price_gnf: selectedPlan.priceGNF,
         }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.log("BOOST ERROR:", data);
+        Alert.alert("Error", "Boost failed");
+        return;
       }
-    );
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      console.log("BOOST ERROR:", data);
-      return;
+      Alert.alert(
+        "Activation en cours",
+        "Veuillez contacter le support KOYAWI pour activer la promotion de votre annonce.",
+        [
+          {
+            text: "Continuer",
+            onPress: () => {
+              openWhatsApp(selectedPlan);
+              navigation.goBack();
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      console.log("BOOST FAIL:", err);
+      Alert.alert("Error", "Network issue");
+    } finally {
+      setLoading(false);
     }
-
- Alert.alert(
-  "Activation en cours",
-  "Veuillez contacter le support KOYAWI pour activer la promotion de votre annonce.",
-  [
-    { text: "Annuler", style: "cancel" },
-    {
-      text: "Continuer",
-      onPress: () => openWhatsApp(selectedPlan),
-    },
-  ]
-);
-    // go back after success
-    navigation.goBack();
-
-  } catch (err) {
-    console.log("BOOST FAIL:", err);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const BOOST_OPTIONS = [
     { label: "24 heures", days: 1, priceGNF: 25000, usd: 3 },
@@ -123,82 +109,76 @@ Je souhaite booster mon annonce :
     { label: "1 mois", days: 30, priceGNF: 250000, usd: 30 },
   ];
 
-
+  const price = Number(listing?.price || 0);
 
   return (
-  <ScrollView
-    style={styles.container}
-    contentContainerStyle={{ paddingBottom: 40 }}
-  >
-    {/* BACK BUTTON */}
-    <TouchableOpacity
-      onPress={() => navigation.goBack()}
-      style={styles.backBtn}
-    >
-      <Ionicons name="arrow-back" size={20} color="#111" />
-    </TouchableOpacity>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      
+      {/* BACK */}
+      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <Ionicons name="arrow-back" size={20} color="#111" />
+      </TouchableOpacity>
 
-    {/* TITLE */}
-    <Text style={styles.title}>Boost Listing</Text>
+      {/* TITLE */}
+      <Text style={styles.title}>Boost Listing</Text>
 
-    {/* LISTING PREVIEW */}
-    <View style={styles.previewCard}>
-      <Image source={{ uri: listing.image }} style={styles.previewImage} />
+      {/* PREVIEW */}
+      <View style={styles.previewCard}>
+        <Image source={{ uri: listingImage }} style={styles.previewImage} />
 
-      <View style={{ flex: 1 }}>
-        <Text numberOfLines={1} style={styles.previewTitle}>
-          {listing.title}
-        </Text>
-
-        <Text style={styles.previewPrice}>
-          {listing.price?.toLocaleString?.() || listing.price} GNF ≈ $
-          {Math.round(listing.price / 8500)}
-        </Text>
-      </View>
-    </View>
-
-    {/* PLAN SELECTOR */}
-    <Text style={styles.sectionTitle}>Choisir une durée</Text>
-
-    {BOOST_OPTIONS.map((plan) => {
-      const isSelected = selectedPlan?.label === plan.label;
-
-      return (
-        <TouchableOpacity
-          key={plan.label}
-          onPress={() => setSelectedPlan(plan)}
-          style={[
-            styles.planCard,
-            isSelected && styles.planSelected,
-          ]}
-        >
-          <Text style={styles.planLabel}>{plan.label}</Text>
-
-          <Text style={styles.planPrice}>
-            {plan.priceGNF.toLocaleString()} GNF
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={styles.previewTitle}>
+            {listing?.title || "Untitled"}
           </Text>
 
-          <Text style={styles.planUsd}>≈ ${plan.usd}</Text>
-        </TouchableOpacity>
-      );
-    })}
+          <Text style={styles.previewPrice}>
+            {price.toLocaleString()} GNF ≈ ${Math.round(price / 8500)}
+          </Text>
+        </View>
+      </View>
 
-    {/* PAY BUTTON (ONLY ONCE) */}
-    <TouchableOpacity
-      disabled={!selectedPlan || loading}
-      onPress={handleBoost}
-      style={[
-        styles.payBtn,
-        (!selectedPlan || loading) && { opacity: 0.5 },
-      ]}
-    >
-      <Text style={styles.payText}>
-        {loading ? "Processing..." : "Payer avec Orange Money"}
-      </Text>
-    </TouchableOpacity>
-  </ScrollView>
-);
+      {/* PLANS */}
+      <Text style={styles.sectionTitle}>Choisir une durée</Text>
+
+      {BOOST_OPTIONS.map((plan) => {
+        const isSelected = selectedPlan?.label === plan.label;
+
+        return (
+          <TouchableOpacity
+            key={plan.label}
+            onPress={() => setSelectedPlan(plan)}
+            style={[styles.planCard, isSelected && styles.planSelected]}
+          >
+            <Text style={styles.planLabel}>{plan.label}</Text>
+
+            <Text style={styles.planPrice}>
+              {Number(plan.priceGNF).toLocaleString()} GNF
+            </Text>
+
+            <Text style={styles.planUsd}>≈ ${plan.usd}</Text>
+          </TouchableOpacity>
+        );
+      })}
+
+      {/* BUTTON */}
+      <TouchableOpacity
+        disabled={!selectedPlan || loading}
+        onPress={handleBoost}
+        style={[
+          styles.payBtn,
+          (!selectedPlan || loading) && { opacity: 0.5 },
+        ]}
+      >
+        <Text style={styles.payText}>
+          {loading ? "Processing..." : "Payer avec Orange Money"}
+        </Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
 }
+
+/* ================= STYLES ================= */
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

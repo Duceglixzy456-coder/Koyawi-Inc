@@ -1,371 +1,256 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-} from "react";
-
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   FlatList,
   Image,
   ActivityIndicator,
   SafeAreaView,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   RefreshControl,
 } from "react-native";
 
 import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { jwtDecode } from "jwt-decode";
 import { useSocket } from "../realtime/SocketContext";
 import { useAuth } from "../Context/AuthContext";
+import { apiFetch } from "../api/apiClient";
 
-export default function ChatScreen({ route, navigation }) {
- const conversationId = route?.params?.conversationId;
-const otherUserId = route?.params?.otherUserId;
-const listingTitle = route?.params?.listingTitle;
-const otherUserName = route?.params?.otherUserName;
+export default function InboxScreen({ navigation }) {
+  // ================= STATE =================
   const [conversations, setConversations] = useState([]);
- 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  
-const { addMessageListener } = useSocket();
 
-const { user, token } = useAuth();
-const currentUserId = user?.id;
+  const { addMessageListener } = useSocket();
+  const { user, token } = useAuth();
+  const currentUserId = user?.id;
 
   // ================= FETCH INBOX =================
-const fetchInbox = useCallback(async () => {
-  try {
-    if (!token || !currentUserId) return;
-
-    setLoading(true);
-
-    const res = await fetch(
-      `http://192.168.1.194:8000/conversations/${currentUserId}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    const data = await res.json();
-
-    const sorted = data.sort(
-      (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0)
-    );
-
-    setConversations(sorted);
-  } catch (err) {
-    console.log("INBOX ERROR:", err);
-  } finally {
-    setLoading(false);
-  }
-}, [token, currentUserId]);
-  // ================= REFRESH =================
-const onRefresh = async () => {
-  setRefreshing(true);
-  await fetchInbox();
-  setRefreshing(false);
-};
-
-
-// ================= MARK AS READ =================
-useEffect(() => {
-  if (!conversationId || !token || !currentUserId) return;
-
-  const markAsRead = async () => {
+  const fetchInbox = useCallback(async () => {
     try {
-      const res = await fetch(
-        `http://192.168.1.194:8000/messages/read`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            conversation_id: conversationId,
-          }),
-        }
-      );
+      if (!token || !currentUserId) return;
 
-      if (!res.ok) return;
+      setLoading(true);
 
-      await fetchInbox();
+      const res = await apiFetch(`/conversations/${currentUserId}`);
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.log("INBOX API ERROR:", errText);
+        setConversations([]);
+        return;
+      }
+
+      const data = await res.json().catch(() => {
+        console.log("INBOX JSON PARSE FAILED");
+        return [];
+      });
+
+      const sorted = (Array.isArray(data) ? data : []).sort((a, b) => {
+        const aTime = new Date(a.updated_at || 0).getTime();
+        const bTime = new Date(b.updated_at || 0).getTime();
+        return bTime - aTime;
+      });
+
+      setConversations(sorted);
     } catch (err) {
-      console.log("READ ERROR:", err);
+      console.log("INBOX ERROR:", err);
+      setConversations([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, currentUserId]);
+
+  // ================= REFRESH =================
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchInbox();
+    setRefreshing(false);
+  };
+
+  // ================= FOCUS LOAD =================
+  useFocusEffect(
+    useCallback(() => {
+      fetchInbox();
+    }, [fetchInbox])
+  );
+
+  // ================= SOCKET UPDATES =================
+  useEffect(() => {
+    if (!addMessageListener || !currentUserId) return;
+
+    const unsub = addMessageListener((msg) => {
+      if (!msg?.conversation_id) return;
+
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv._id === msg.conversation_id
+            ? {
+                ...conv,
+                last_message: msg.text || "",
+                last_sender_id: msg.sender_id,
+                updated_at: msg.created_at || new Date().toISOString(),
+              }
+            : conv
+        )
+      );
+    });
+
+    return unsub;
+  }, [addMessageListener, currentUserId]);
+
+  // ================= TIME AGO =================
+  const getTimeAgo = (dateString) => {
+    if (!dateString) return "";
+
+    try {
+      const cleaned = dateString.split(".")[0] + "Z";
+      const date = new Date(cleaned);
+
+      if (isNaN(date.getTime())) return "";
+
+      const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+
+      if (diff < 60) return "just now";
+      if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+      if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
+
+      return date.toLocaleDateString();
+    } catch {
+      return "";
     }
   };
 
-  markAsRead();
-}, [conversationId, token, currentUserId, fetchInbox]);
+  // ================= DELETE =================
+  const handleLongPressConversation = (conversationId) => {
+    if (!conversationId) return;
 
-
-useFocusEffect(
-  useCallback(() => {
-    fetchInbox();
-  }, [fetchInbox])
-);
-const [now, setNow] = useState(Date.now());
-
-useEffect(() => {
-  const interval = setInterval(() => {
-    setNow(Date.now());
-  }, 60000); // update every 60 seconds
-
-  return () => clearInterval(interval);
-}, []);
-useEffect(() => {
-  if (!addMessageListener || !currentUserId) return;
-
-  const unsub = addMessageListener((msg) => {
-    if (!msg?.conversation_id) return;
-
-    const isOpenChat = msg.conversation_id === conversationId;
-
-    setConversations((prev) =>
-      prev.map((conv) => {
-        if (conv._id !== msg.conversation_id) return conv;
-
-        return {
-          ...conv,
-          last_message: msg.text,
-          last_sender_id: msg.sender_id,
-          updated_at: msg.created_at,
-        };
-      })
-    );
-
-    // 🔥 ONLY REFRESH if NOT open chat
-    if (!isOpenChat) {
-      fetchInbox();
-    }
-  });
-
-  return unsub;
-}, [addMessageListener, currentUserId, conversationId, fetchInbox]);
-const getTimeAgo = (dateString) => {
-  if (!dateString) return "";
-
-  // 🔥 FIX MICROSECONDS (.124000 → .124)
-  const cleaned = dateString.split(".")[0] + "Z";
-
-  const date = new Date(cleaned);
-
-  if (isNaN(date.getTime())) {
-    console.log("BAD DATE:", dateString);
-    return "";
-  }
-
-  const now = Date.now();
-  const diff = Math.floor((now - date.getTime()) / 1000);
-
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
-
-  return date.toLocaleDateString();
-};
-  // ================= DELETE CONVERSATION =================
-const handleLongPressConversation = (conversationId) => {
-  if (!conversationId) {
-    console.log("BLOCKED: Missing conversationId");
-    return;
-  }
-
-  Alert.alert(
-    "Delete Conversation",
-    "This will permanently remove this chat for you.",
-    [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-           
-
-           
-if (!token) return;
-
-            // prevent double deletion spam
-          
-
-            const res = await fetch(
-              `http://192.168.1.194:8000/conversations/${conversationId}`,
-              {
+    Alert.alert(
+      "Delete Conversation",
+      "This will permanently remove this chat for you.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const res = await apiFetch(`/conversations/${conversationId}`, {
                 method: "DELETE",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
+              });
+
+              if (!res.ok) {
+                const text = await res.text();
+                console.log("DELETE FAILED:", text);
+                return;
               }
-            );
 
-            // safer response handling
-            const data = await res.json().catch(() => null);
-
-            if (!res.ok) {
-              console.log("DELETE FAILED:", data || res.status);
-              Alert.alert("Error", "Could not delete conversation.");
-              return;
+              setConversations((prev) =>
+                prev.filter((c) => c._id !== conversationId)
+              );
+            } catch (err) {
+              console.log("DELETE ERROR:", err);
             }
-
-            // safe UI update
-            setConversations((prev) =>
-              prev.filter((c) => c._id !== conversationId)
-            );
-
-          } catch (err) {
-            console.log("DELETE CONVO ERROR:", err);
-            Alert.alert("Error", "Network error. Try again.");
-          }
+          },
         },
-      },
-    ],
-    { cancelable: true }
-  );
-};
+      ]
+    );
+  };
 
- const renderItem = ({ item }) => {
-  const otherUserId =
-    item.buyer_id === currentUserId
-      ? item.seller_id
-      : item.buyer_id;
+  // ================= RENDER ITEM =================
+  const renderItem = ({ item }) => {
+    const isMine = item.last_sender_id === currentUserId;
 
-  const otherUserName =
-    item.buyer_id === currentUserId
-      ? item.seller_name
-      : item.buyer_name;
+    const unread = Number(item.unread_count || 0);
 
-  const listingImage =
-    Array.isArray(item.listing_images) && item.listing_images.length > 0
-      ? item.listing_images[0]
-      : Array.isArray(item.images) && item.images.length > 0
-      ? item.images[0]
-      : item.listing_image
-      ? item.listing_image
-      : item.image
-      ? item.image
-      : item.coverImage
-      ? item.coverImage
-      : null;
+    return (
+      <TouchableOpacity
+        onPress={() => {
+          if (!item?._id) return;
 
- const unread =
-  currentUserId && item?.unread_counts?.[currentUserId]
-    ? Number(item.unread_counts[currentUserId])
-    : 0;
-
-  const isLastMessageMine = item.last_sender_id === currentUserId;
-
-  return (
-    <TouchableOpacity
-      onPress={() => {
-        navigation.navigate("Chat", {
-  conversationId: item._id,
-  listingId: item.listing_id,
-  otherUserId:
-  item.buyer_id === currentUserId ? item.seller_id : item.buyer_id,
-});
-      }}
-      onLongPress={() => handleLongPressConversation(item._id)}
-      delayLongPress={400}
-      style={{
-        flexDirection: "row",
-        padding: 14,
-        marginBottom: 10,
-        backgroundColor: "#fff",
-        borderRadius: 14,
-        alignItems: "center",
-      }}
-    >
-      {/* IMAGE */}
-      <Image
-        source={{
-          uri: listingImage || "https://via.placeholder.com/100",
+          navigation.navigate("Chat", {
+            conversationId: item._id,
+            listingId: item.listing_id,
+            otherUserId:
+              item.buyer_id === currentUserId
+                ? item.seller_id
+                : item.buyer_id,
+          });
         }}
+        onLongPress={() => handleLongPressConversation(item._id)}
         style={{
-          width: 45,
-          height: 45,
-          borderRadius: 12,
-          marginRight: 12,
+          flexDirection: "row",
+          padding: 14,
+          marginBottom: 10,
+          backgroundColor: "#fff",
+          borderRadius: 14,
+          alignItems: "center",
         }}
-      />
+      >
+        {/* IMAGE */}
+        <Image
+          source={{
+            uri:
+              item.image ||
+              item.listing_image ||
+              item.coverImage ||
+              "https://via.placeholder.com/50",
+          }}
+          style={{
+            width: 50,
+            height: 50,
+            borderRadius: 10,
+            marginRight: 10,
+            backgroundColor: "#eee",
+          }}
+        />
 
-      {/* TEXT */}
-      <View style={{ flex: 1 }}>
-        {/* TITLE ROW + BLUE DOT */}
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Text
-            style={{
-              fontSize: 15,
-              fontWeight: unread > 0 ? "700" : "600",
-            }}
-            numberOfLines={1}
-          >
-            {otherUserName || "Unknown"} • {item.listing_title || "Untitled Listing"}
+        {/* TEXT */}
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 15, fontWeight: "600" }}>
+            {item.buyer_id === currentUserId
+              ? item.seller_name
+              : item.buyer_name}{" "}
+            • {item.listing_title}
           </Text>
 
-          {unread > 0 && (
-            <View
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor: "#1877F2",
-                marginLeft: 6,
-              }}
-            />
-          )}
+          <Text
+            numberOfLines={1}
+            style={{
+              fontSize: 13,
+              color: unread ? "#000" : "#777",
+              fontWeight: unread ? "600" : "400",
+            }}
+          >
+            {isMine
+              ? `You: ${item.last_message || ""}`
+              : item.last_message || "No messages yet"}
+          </Text>
         </View>
 
-        {/* LAST MESSAGE */}
-        <Text
-          style={{
-            fontSize: 13,
-            color: unread > 0 ? "#000" : "#777",
-            fontWeight: unread > 0 ? "600" : "400",
-          }}
-          numberOfLines={1}
-        >
-          {isLastMessageMine
-            ? `You: ${item.last_message || ""}`
-            : item.last_message || "No messages yet"}
-        </Text>
-      </View>
-
-      {/* TIME */}
-      <View style={{ alignItems: "flex-end" }}>
+        {/* TIME */}
         <Text style={{ fontSize: 11, color: "#999" }}>
-          {item.updated_at ? getTimeAgo(item.updated_at) : ""}
+          {getTimeAgo(item.updated_at)}
         </Text>
-      </View>
-    </TouchableOpacity>
-  );
-};
-  
+      </TouchableOpacity>
+    );
+  };
+
   // ================= UI =================
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F6F7FB" }}>
       {/* HEADER */}
       <View
         style={{
-          paddingHorizontal: 15,
-          paddingVertical: 15,
+          padding: 15,
           backgroundColor: "#fff",
           borderBottomWidth: 0.5,
           borderBottomColor: "#eee",
         }}
       >
-        <Text style={{ fontSize: 22, fontWeight: "700" }}>
-          Inbox
-        </Text>
+        <Text style={{ fontSize: 22, fontWeight: "700" }}>Inbox</Text>
       </View>
 
       {/* BODY */}
@@ -374,25 +259,75 @@ if (!token) return;
           <ActivityIndicator size="large" />
         </View>
       ) : (
-       <FlatList
-  data={conversations}
-  extraData={conversations}
-  keyExtractor={(item) => item._id}
-  renderItem={renderItem}
-  contentContainerStyle={{
-    padding: 15,
-    paddingBottom: 30,
-  }}
-  refreshing={refreshing}
-  onRefresh={onRefresh}
-  refreshControl={
-    <RefreshControl
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-    />
-  }
-/>
+        <FlatList
+          data={conversations}
+          keyExtractor={(item) => item._id}
+          renderItem={renderItem}
+          contentContainerStyle={{ padding: 15 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        />
       )}
     </SafeAreaView>
   );
 }
+const styles = {
+  container: {
+    flex: 1,
+    backgroundColor: "#F6F7FB",
+  },
+
+  header: {
+    padding: 15,
+    backgroundColor: "#fff",
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#eee",
+  },
+
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+  },
+
+  card: {
+    flexDirection: "row",
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+  image: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    marginRight: 10,
+    backgroundColor: "#eee",
+  },
+
+  title: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  message: {
+    fontSize: 13,
+  },
+
+  messageUnread: {
+    color: "#000",
+    fontWeight: "600",
+  },
+
+  messageRead: {
+    color: "#777",
+    fontWeight: "400",
+  },
+
+  time: {
+    fontSize: 11,
+    color: "#999",
+  },
+};

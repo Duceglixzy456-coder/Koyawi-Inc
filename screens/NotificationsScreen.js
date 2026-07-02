@@ -6,81 +6,79 @@ import {
   Image,
   StyleSheet,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import NotificationSkeleton from "../components/Skeletons/NotificationSkeleton";
 import { Colors } from "../theme/colors";
 import { useAuth } from "../Context/AuthContext";
-const API_URL = "http://192.168.1.194:8000";
-export default function NotificationsScreen({ navigation }) {
-  
+import { apiFetch } from "../api/apiClient";
 
+export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const { token } = useAuth();
-
-  // 👇 prevents refetch every single focus
   const hasLoadedOnce = useRef(false);
 
   // ================= TIME AGO =================
 const timeAgo = (dateString) => {
   if (!dateString) return "";
 
-  // 🔥 FIX MICROSECONDS (.124000 → .124)
-  const cleaned = dateString.split(".")[0] + "Z";
-
+  const cleaned = dateString?.split(".")[0] + "Z";
   const date = new Date(cleaned);
 
-  if (isNaN(date.getTime())) {
-    console.log("BAD DATE:", dateString);
-    return "";
-  }
+  if (isNaN(date.getTime())) return "";
 
   const diff = Math.floor((Date.now() - date.getTime()) / 1000);
 
   if (diff < 60) return "just now";
   if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
-
-  return date.toLocaleDateString();
+  return `${Math.floor(diff / 86400)} days ago`;
 };
   // ================= FETCH =================
- const fetchNotifications = async (silent = false) => {
+const fetchNotifications = async (silent = false) => {
   try {
     if (!silent) setLoading(true);
 
-    const res = await fetch(`${API_URL}/notifications`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const res = await apiFetch("/notifications");
+
+    // 🔥 IMPORTANT: handle auth failure cleanly
+    if (res.status === 401) {
+      console.log("Unauthorized - token issue");
+      setNotifications([]);
+      return;
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.log("NOTIFICATIONS ERROR:", errText);
+      return;
+    }
 
     const data = await res.json();
 
-    console.log("NOTIFICATIONS:", data); // debug
-
-    setNotifications(data);
+    setNotifications(Array.isArray(data) ? data : []);
     hasLoadedOnce.current = true;
 
   } catch (err) {
     console.log("Notifications error:", err);
+    setNotifications([]);
   } finally {
     setLoading(false);
     setRefreshing(false);
   }
 };
-  // ================= FIX: STOP REFETCH EVERY FOCUS =================
+  // ================= FOCUS LOAD =================
   useFocusEffect(
-  useCallback(() => {
-    if (token) {
-      fetchNotifications();
-    }
-  }, [token])
-);
+    useCallback(() => {
+      if (token) {
+        fetchNotifications();
+      }
+    }, [token])
+  );
 
   // ================= RENDER ITEM =================
   const renderItem = ({ item }) => {
@@ -102,7 +100,7 @@ const timeAgo = (dateString) => {
             {item.text || "New activity"}
           </Text>
 
-        <Text style={styles.time}>
+          <Text style={styles.time}>
   {timeAgo(item.created_at)}
 </Text>
         </View>
@@ -112,48 +110,39 @@ const timeAgo = (dateString) => {
     );
   };
 
-// ================= UI =================
-if (loading) {
+  // ================= UI =================
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Account Activity</Text>
+        </View>
+
+        <NotificationSkeleton />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Account Activity</Text>
       </View>
 
-      <NotificationSkeleton />
+      <FlatList
+        data={notifications}
+        keyExtractor={(item) => item._id}
+        renderItem={renderItem}
+        contentContainerStyle={{ padding: 15, paddingTop: 5 }}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Ionicons name="notifications-outline" size={34} color="#999" />
+            <Text style={styles.emptyText}>No recent activity</Text>
+          </View>
+        }
+      />
     </View>
   );
-}
-
-return (
-  <View style={styles.container}>
-    {/* HEADER */}
-    <View style={styles.header}>
-      <Text style={styles.headerTitle}>Account Activity</Text>
-    </View>
-
-    {/* LIST */}
-    <FlatList
-      data={notifications}
-      keyExtractor={(item) => item._id}
-      renderItem={renderItem}
-      contentContainerStyle={{ padding: 15, paddingTop: 5 }}
-      ListEmptyComponent={
-        <View style={styles.empty}>
-          <Ionicons
-            name="notifications-outline"
-            size={34}
-            color="#999"
-          />
-          <Text style={styles.emptyText}>
-            No recent activity
-          </Text>
-        </View>
-      }
-    />
-  </View>
-);
 }
 
 // ================= STYLES =================

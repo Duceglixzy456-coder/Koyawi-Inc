@@ -25,6 +25,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
 import ChatSkeleton from "../components/Skeletons/ChatSkeleton";
 import { useAuth } from "../Context/AuthContext";
+import { apiFetch } from "../api/apiClient";
 import { api } from "../utils/api";
 import { useSocket } from "../realtime/SocketContext";
 
@@ -54,37 +55,29 @@ const currentUserId = userId;
     : listingTitle || "Chat";
 
 
-useEffect(() => {
-  if (!conversationId || !currentUserId) return;
 
-  fetch(
-    `http://192.168.1.194:8000/messages/read/${conversationId}?user_id=${currentUserId}`,
-    {
-      method: "PUT",
-    }
-  );
-}, [conversationId, currentUserId]);
+    useEffect(() => {
+  const check = async () => {
+    const t = await AsyncStorage.getItem("access_token");
+    console.log("CHAT SCREEN TOKEN:", t);
+  };
 
+  check();
+}, []);
   // ---------------- LOAD MESSAGES ----------------
 const loadMessages = async () => {
-  if (!conversationId || !token) return;
+  if (!conversationId) return;
 
   try {
-    setLoadingMessages(true); // 👈 ADD THIS
+    setLoadingMessages(true);
 
-    const res = await api(
-      `/messages/${conversationId}`,
-      { method: "GET" },
-      navigation
-    );
+    const res = await apiFetch(`/messages/${conversationId}`);
 
-    const data = await res.json();
+    const data = await res.json(); // 🔥 THIS IS THE MISSING PIECE
 
-    console.log("MESSAGES FROM API:");
-    console.log(JSON.stringify(data, null, 2));
+    console.log("MESSAGES PARSED:", data);
 
     if (!Array.isArray(data)) {
-      
       setMessages([]);
       return;
     }
@@ -92,8 +85,9 @@ const loadMessages = async () => {
     setMessages(data);
   } catch (err) {
     console.log("LOAD MESSAGES ERROR:", err);
+    setMessages([]);
   } finally {
-    setLoadingMessages(false); // 👈 ADD THIS (VERY IMPORTANT)
+    setLoadingMessages(false);
   }
 };
 useEffect(() => {
@@ -101,49 +95,95 @@ useEffect(() => {
 }, [conversationId, token]);
 
 
-const API_URL = "http://192.168.1.194:8000";
-
 // ---------------- MARK AS READ ----------------
-useEffect(() => {
-  if (!conversationId || !token) return;
+useFocusEffect(
+  useCallback(() => {
+    if (!conversationId || !token) return;
 
-  fetch(
-    `http://192.168.1.194:8000/messages/read/${conversationId}?user_id=${currentUserId}`,
-    {
-      method: "PUT",
-    }
-  );
-}, [conversationId, currentUserId]);
+    let isActive = true;
+
+    const markAsRead = async () => {
+      try {
+        const res = await apiFetch("/messages/read", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            conversation_id: conversationId,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          console.log("MARK READ FAILED:", data);
+          return;
+        }
+
+        console.log("MARK READ SUCCESS:", data);
+      } catch (err) {
+        console.log("MARK READ ERROR:", err);
+      }
+    };
+
+    // delay slightly so messages are already rendered
+    const timeout = setTimeout(() => {
+      if (isActive) markAsRead();
+    }, 500);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timeout);
+    };
+  }, [conversationId, token])
+);
 const formatGuineaTime = (dateString) => {
   if (!dateString) return "";
 
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return "";
+  try {
+    const date = new Date(dateString);
 
-  return date.toLocaleTimeString("en-GB", {
-    timeZone: "Africa/Conakry", // 🇬🇳 Guinea
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false, // 24-hour format
-  });
+    return date.toLocaleTimeString("en-US", {
+      timeZone: "Africa/Conakry",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch (err) {
+    console.log("GUINEA TIME ERROR:", err);
+    return "";
+  }
 };
-
-
-  // ---------------- SEND MESSAGE ----------------
+// ---------------- SEND MESSAGE ----------------
   
  const handleSendMessage = async () => {
   if (!text.trim()) return;
 
   const messageToSend = text;
-  setText(""); // clear immediately
+  setText("");
 
+  // 1. optimistic UI update (instant message)
+  const tempId = Date.now().toString();
+
+  const optimisticMessage = {
+    _id: tempId,
+    conversation_id: conversationId,
+    sender_id: currentUserId,
+    receiver_id: otherUserId,
+    text: messageToSend,
+    created_at: new Date().toISOString(),
+    status: "sent",
+  };
+
+  setMessages((prev) => [...prev, optimisticMessage]);
+const token = await AsyncStorage.getItem("accessToken");
+console.log("SEND TOKEN:", token);
   try {
-    const res = await fetch("http://192.168.1.194:8000/messages", {
+    const res = await apiFetch("/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+     
       body: JSON.stringify({
         conversation_id: conversationId,
         receiver_id: otherUserId,
@@ -151,45 +191,45 @@ const formatGuineaTime = (dateString) => {
       }),
     });
 
-    // 🔥 IMPORTANT: don't assume JSON (this is what was crashing you)
-    const raw = await res.text();
-
-    console.log("SEND STATUS:", res.status);
-    console.log("SEND RAW RESPONSE:", raw);
-
-    // if backend failed, stop here
     if (!res.ok) {
-      console.log("SEND FAILED (backend error)");
+      const errText = await res.text();
+      console.log("SEND FAILED:", errText);
+
+      // rollback optimistic message
+      setMessages((prev) =>
+        prev.filter((m) => m._id !== tempId)
+      );
+
       return;
     }
 
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch (e) {
-      console.log("RESPONSE NOT JSON:", raw);
-      return;
+    const data = await res.json().catch(() => null);
+
+    // 2. replace temp message with real one (if backend returns id)
+    if (data?.message_id) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m._id === tempId
+            ? {
+                ...m,
+                _id: data.message_id,
+                status: "sent",
+              }
+            : m
+        )
+      );
     }
 
-    // OPTIONAL: prevent duplicates if socket already adds message
-    setMessages((prev) => {
-      if (prev.some((m) => m._id === data.message_id)) return prev;
-
-      return [
-        ...prev,
-        {
-          _id: data.message_id,
-          conversation_id: conversationId,
-          sender_id: currentUserId,
-          receiver_id: otherUserId,
-          text: messageToSend,
-          created_at: new Date().toISOString(),
-        },
-      ];
-    });
+    // 3. inbox refresh hook (optional global)
+    global?.refreshInbox?.();
 
   } catch (err) {
     console.log("SEND ERROR:", err);
+
+    // rollback on crash
+    setMessages((prev) =>
+      prev.filter((m) => m._id !== tempId)
+    );
   }
 };
 const scrollToBottom = () => {
@@ -353,7 +393,7 @@ const renderItem = ({ item, index }) => {
     </>
   );
 };
-  return (
+ return (
   <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -383,7 +423,7 @@ const renderItem = ({ item, index }) => {
           <Text style={{ fontSize: 18 }}>←</Text>
         </TouchableOpacity>
 
-        {/* CLICKABLE TITLE → LISTING DETAIL */}
+        {/* TITLE */}
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => {
@@ -407,46 +447,23 @@ const renderItem = ({ item, index }) => {
         </TouchableOpacity>
       </View>
 
-    {/* MESSAGES */}
-{loadingMessages ? (
-  <ChatSkeleton />
-) : (
-  <FlatList
-    ref={flatListRef}
-    data={messages}
-    keyExtractor={(item) => item._id?.toString()}
-    renderItem={renderItem}
-    extraData={messages}
-    removeClippedSubviews={false}
-    showsVerticalScrollIndicator={false}
-    keyboardShouldPersistTaps="handled"
-    maintainVisibleContentPosition={{
-      minIndexForVisible: 0,
-    }}
+      {/* MESSAGES */}
+      {loadingMessages ? (
+        <ChatSkeleton />
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item._id?.toString()}
+          renderItem={renderItem}
+          extraData={messages}
+          removeClippedSubviews={false}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        />
+      )}
 
-    // 🔥 THIS MUST BE INSIDE FLATLIST
-    onScroll={(event) => {
-      const { layoutMeasurement, contentOffset, contentSize } =
-        event.nativeEvent;
-
-      const paddingToBottom = 70;
-
-      const distanceFromBottom =
-        contentSize.height -
-        (layoutMeasurement.height + contentOffset.y);
-
-      const atBottom = distanceFromBottom < paddingToBottom;
-
-      setIsAtBottom(atBottom);
-
-      if (atBottom) {
-        setShowScrollButton(false);
-        setNewMessageCount(0);
-      }
-    }}
-    scrollEventThrottle={16}
-  />
-)}
       {/* SCROLL BUTTON */}
       {showScrollButton && (
         <TouchableOpacity
@@ -456,38 +473,20 @@ const renderItem = ({ item, index }) => {
             setNewMessageCount(0);
             setIsAtBottom(true);
           }}
-          activeOpacity={0.85}
           style={{
             position: "absolute",
             bottom: 100,
             alignSelf: "center",
-            flexDirection: "row",
-            alignItems: "center",
             backgroundColor: "#111",
             paddingHorizontal: 14,
             paddingVertical: 10,
             borderRadius: 25,
-            shadowColor: "#000",
-            shadowOpacity: 0.2,
-            shadowRadius: 10,
-            elevation: 6,
           }}
         >
-          <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>
+          <Text style={{ color: "#fff", fontSize: 13 }}>
             {newMessageCount > 0
               ? `New messages (${newMessageCount})`
               : "New messages"}
-          </Text>
-
-          <Text
-            style={{
-              color: "#fff",
-              fontSize: 16,
-              marginLeft: 8,
-              transform: [{ rotate: "180deg" }],
-            }}
-          >
-            ˄
           </Text>
         </TouchableOpacity>
       )}
@@ -531,55 +530,46 @@ const renderItem = ({ item, index }) => {
 );
 }
 const styles = {
-  // ================= CONTAINER =================
   container: {
     flex: 1,
     backgroundColor: "#fff",
   },
 
-  // ================= MESSAGE LIST WRAPPER =================
   listContent: {
     paddingHorizontal: 10,
     paddingVertical: 10,
     paddingBottom: 20,
   },
 
-  // ================= MESSAGE WRAPPER =================
   messageContainer: {
     width: "100%",
     marginVertical: 9,
   },
 
-  // ================= MY MESSAGE (RIGHT SIDE) =================
   myMessage: {
     alignSelf: "flex-end",
     backgroundColor: "#b4f1a9a1",
     paddingVertical: 10,
     paddingHorizontal: 10,
     borderRadius: 10,
-
     maxWidth: "75%",
   },
 
-  // ================= THEIR MESSAGE (LEFT SIDE) =================
   theirMessage: {
     alignSelf: "flex-start",
     backgroundColor: "#b4f1a91c",
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 14,
-
     maxWidth: "75%",
   },
 
-  // ================= MESSAGE TEXT =================
   messageText: {
     fontSize: 16,
-    color: "#000000",
+    color: "#000",
     lineHeight: 18,
   },
 
-  // ================= TIME + CHECK ROW =================
   rowBottom: {
     flexDirection: "row",
     alignItems: "center",
@@ -588,19 +578,16 @@ const styles = {
     gap: 10,
   },
 
-  // ================= TIME TEXT =================
   timeText: {
     fontSize: 12,
     color: "#777777ad",
   },
 
-  // ================= CHECK MARKS =================
   check: {
     fontSize: 12,
     fontWeight: "900",
   },
 
-  // ================= INPUT AREA =================
   inputContainer: {
     flexDirection: "row",
     padding: 10,
@@ -632,7 +619,6 @@ const styles = {
     fontWeight: "600",
   },
 
-  // ================= SCROLL BUTTON =================
   scrollButton: {
     position: "absolute",
     bottom: 100,
@@ -652,17 +638,17 @@ const styles = {
   },
 
   dateSeparator: {
-  alignItems: "center",
-  marginVertical: 10,
-},
+    alignItems: "center",
+    marginVertical: 10,
+  },
 
-dateText: {
-  fontSize: 12,
-  color: "#666",
-  backgroundColor: "#f2f2f2",
-  paddingHorizontal: 10,
-  paddingVertical: 4,
-  borderRadius: 10,
-  overflow: "hidden",
-},
-}
+  dateText: {
+    fontSize: 12,
+    color: "#666",
+    backgroundColor: "#f2f2f2",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+};

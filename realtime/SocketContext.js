@@ -6,20 +6,13 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { jwtDecode } from "jwt-decode";
 import { useAuth } from "../Context/AuthContext";
 
 const SocketContext = createContext(null);
-
 export const useSocket = () => useContext(SocketContext);
 
 export const SocketProvider = ({ children }) => {
- const { token, user, loading } = useAuth();
-const userId = user?.id;
-const hasConnectedRef = useRef(false);
-const notifyListeners = useCallback((data) => {
-  listenersRef.current.forEach((fn) => fn(data));
-}, []);
+  const { token, userId, loading } = useAuth();
 
   const socketRef = useRef(null);
   const listenersRef = useRef(new Set());
@@ -27,21 +20,25 @@ const notifyListeners = useCallback((data) => {
 
   const [connected, setConnected] = useState(false);
 
-  
+  // ---------------- LISTENERS ----------------
+  const addMessageListener = useCallback((fn) => {
+    listenersRef.current.add(fn);
+    return () => listenersRef.current.delete(fn);
+  }, []);
 
-  // ---------------- CONNECT ----------------
-  const connect = useCallback(() => {
-   if (!userId || hasConnectedRef.current) return;
-hasConnectedRef.current = true;
+  const notifyListeners = useCallback((data) => {
+    listenersRef.current.forEach((fn) => fn(data));
+  }, []);
 
+  // ---------------- CONNECT (SINGLE SAFE VERSION) ----------------
+  useEffect(() => {
+    if (loading || !token || !userId) return;
+
+    // prevent duplicate sockets
     if (socketRef.current?.readyState === WebSocket.OPEN) return;
 
-    // cleanup old socket
+    // close old socket if exists
     if (socketRef.current) {
-      socketRef.current.onopen = null;
-      socketRef.current.onmessage = null;
-      socketRef.current.onerror = null;
-      socketRef.current.onclose = null;
       socketRef.current.close();
       socketRef.current = null;
     }
@@ -67,46 +64,35 @@ hasConnectedRef.current = true;
       try {
         const data = JSON.parse(event.data);
 
-       const id = user?.id;
-
-       const enriched = {
-  ...data,
-  isMe: data.sender_id === id,
-};
-
-        notifyListeners(enriched);
+        notifyListeners({
+          ...data,
+          isMe: data.sender_id === userId,
+        });
       } catch (e) {
-        console.log("WS PARSE ERROR", e);
+        console.log("WS PARSE ERROR:", e);
       }
     };
 
     socket.onerror = (e) => {
-      console.log("WS ERROR", e);
+      console.log("WS ERROR:", e?.message || e);
     };
 
     socket.onclose = () => {
       console.log("WS CLOSED ❌");
       setConnected(false);
-hasConnectedRef.current = false;
+      socketRef.current = null;
     };
-  }, [userId, notifyListeners]);
 
-  // ---------------- AUTO CONNECT ----------------
-  useEffect(() => {
-    if (loading || !token) return;
-
-    connect();
-
+    // cleanup ONLY on unmount or logout
     return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
-        socketRef.current = null;
-      }
+      console.log("WS CLEANUP");
+      socket.close();
+      socketRef.current = null;
     };
-  }, [token, loading, connect]);
+  }, [token, userId, loading]);
 
   // ---------------- SEND MESSAGE ----------------
-  const sendMessage = (payload) => {
+  const sendMessage = useCallback((payload) => {
     const socket = socketRef.current;
 
     if (socket?.readyState === WebSocket.OPEN) {
@@ -114,20 +100,15 @@ hasConnectedRef.current = false;
     } else {
       queueRef.current.push(payload);
     }
-  };
-
-  // ---------------- LISTENERS ----------------
-  const addMessageListener = (fn) => {
-    listenersRef.current.add(fn);
-
-    return () => {
-      listenersRef.current.delete(fn);
-    };
-  };
+  }, []);
 
   return (
     <SocketContext.Provider
-      value={{ connected, sendMessage, addMessageListener }}
+      value={{
+        connected,
+        sendMessage,
+        addMessageListener,
+      }}
     >
       {children}
     </SocketContext.Provider>

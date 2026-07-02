@@ -40,58 +40,49 @@ export default function ProfileScreen({ navigation }) {
   const { language, toggleLanguage } = useLanguage();
   const { token, logout } = useAuth();
 
-  const t = translations[language];
+  const t = translations[language] || {};
+
+  const userId = (() => {
+    try {
+      return token ? jwtDecode(token)?.sub : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const clearAuth = async () => {
+    logout();
+  };
 
   const handleLogout = () => {
-  Alert.alert(
-    t?.logoutConfirmTitle || "Logout",
-    t?.logoutConfirmMessage || "Are you sure you want to logout?",
-    [
-      { text: t?.cancel || "Cancel", style: "cancel" },
-      {
-        text: t?.logout || "Logout",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await AsyncStorage.multiRemove([
-              "access_token",
-              "refresh_token",
-            ]);
-
-            logout?.(); // ✅ ONLY THIS
-          } catch (err) {
-            console.log("LOGOUT ERROR:", err);
-          }
+    Alert.alert(
+      t.logoutConfirmTitle || "Logout",
+      t.logoutConfirmMessage || "Are you sure you want to logout?",
+      [
+        { text: t.cancel || "Cancel", style: "cancel" },
+        {
+          text: t.logout || "Logout",
+          style: "destructive",
+          onPress: clearAuth,
         },
-      },
-    ]
-  );
-};
+      ]
+    );
+  };
+
   const handleDeactivate = () => {
-  Alert.alert(
-    "Deactivate Account",
-    "This will disable your account. You can restore it later.",
-    [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Deactivate",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await AsyncStorage.multiRemove([
-              "access_token",
-              "refresh_token",
-            ]);
-
-            logout?.(); // ✅ ONLY THIS
-          } catch (err) {
-            console.log("Deactivate error:", err);
-          }
+    Alert.alert(
+      "Deactivate Account",
+      "This will disable your account. You can restore it later.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Deactivate",
+          style: "destructive",
+          onPress: clearAuth,
         },
-      },
-    ]
-  );
-};
+      ]
+    );
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -114,7 +105,7 @@ export default function ProfileScreen({ navigation }) {
           label={t.followers}
           onPress={() =>
             navigation.navigate("FollowersScreen", {
-              userId: token ? jwtDecode(token).sub : null,
+              userId,
             })
           }
         />
@@ -128,11 +119,7 @@ export default function ProfileScreen({ navigation }) {
 
         <MenuItem
           icon="language-outline"
-          label={
-            language === "en"
-              ? "Language: English"
-              : "Langue: Français"
-          }
+          label={language === "en" ? "Language: English" : "Langue: Français"}
           onPress={toggleLanguage}
         />
       </Section>
@@ -160,10 +147,7 @@ export default function ProfileScreen({ navigation }) {
 
       {/* DANGER ZONE */}
       <View style={styles.dangerZone}>
-        <TouchableOpacity
-          style={styles.dangerItem}
-          onPress={handleDeactivate}
-        >
+        <TouchableOpacity style={styles.dangerItem} onPress={handleDeactivate}>
           <Text style={styles.dangerText}>{t.deactivate}</Text>
         </TouchableOpacity>
 

@@ -1,4 +1,4 @@
-import React, { useState, useContext } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -15,14 +15,14 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-const { login } = useAuth();
+  const { login } = useAuth();
 
   const isFormValid =
     phone.trim().length > 0 &&
     password.trim().length > 0;
 
   const loginUser = async () => {
-    if (!phone.trim() || !password.trim()) {
+    if (!isFormValid) {
       Alert.alert("Missing Information", "Please enter phone and password.");
       return;
     }
@@ -47,9 +47,30 @@ const { login } = useAuth();
         Alert.alert("Login Failed", data.detail || "Invalid credentials");
         return;
       }
-await login(data.access_token);
+
+      // ---------------- TOKEN EXTRACTION ----------------
+      const accessToken =
+        data.access_token || data.token || data.accessToken;
+
+      const refreshToken =
+        data.refresh_token || data.refreshToken || null;
+
+      const userId =
+        data.user_id || data.userId || data.sub || null;
+
+      if (!accessToken) {
+        Alert.alert("Login Error", "No access token returned");
+        return;
+      }
+
+      // ---------------- SAVE AUTH STATE ----------------
+      await login(accessToken, refreshToken, userId);
+
+      // ---------------- NAVIGATE ----------------
+     
+
     } catch (err) {
-      console.log(err);
+      console.log("LOGIN ERROR:", err);
       Alert.alert("Error", "Unable to connect to server");
     } finally {
       setLoading(false);
@@ -156,7 +177,6 @@ const styles = {
     width: "100%",
     height: "100%",
     resizeMode: "contain",
-    marginTop: 0,
   },
 
   form: {

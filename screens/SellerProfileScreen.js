@@ -23,7 +23,7 @@ import { translations } from "../utils/translations";
 export default function SellerProfileScreen({ navigation, route }) {
   const [user, setUser] = useState(null);
   const [editingBio, setEditingBio] = useState(false);
-const [bioText, setBioText] = useState(user?.bio || "");
+const [bioText, setBioText] = useState("");
   const [localProfileImage, setLocalProfileImage] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [stats, setStats] = useState({ followers: 0, following: 0 });
@@ -57,11 +57,10 @@ const isOwner =
   currentUserId === profileUserId;
   
 
-  useEffect(() => {
+ useEffect(() => {
   if (!profileUserId || !token) return;
-
   loadProfile();
-}, [profileUserId, token, loadProfile]);
+}, [profileUserId, token]);
 const getImages = (item) => {
   if (Array.isArray(item?.images) && item.images.length > 0) return item.images;
   if (typeof item?.images === "string") return [item.images];
@@ -69,6 +68,10 @@ const getImages = (item) => {
   if (item?.image) return [item.image];
   return [];
 };
+useEffect(() => {
+  if (!profileUserId || !token) return;
+  loadFollowStatus();
+}, [profileUserId, token]);
 
 const fetchSellerListings = async (id) => {
   try {
@@ -132,6 +135,7 @@ const loadProfile = useCallback(async () => {
     }
 
    setUser({
+    
   _id: data.userId,
   full_name: data.fullName,
   city: data.city,
@@ -398,9 +402,9 @@ const tabLabels = {
     </>
   ) : (
     <>
-      <Text style={styles.infoValue}>
-        {user?.bio || "Modifier la bio"}
-      </Text>
+     <Text style={styles.infoValue}>
+  {user?.bio || "No bio yet"}
+</Text>
 
       <TouchableOpacity
         onPress={() => {
@@ -470,7 +474,7 @@ const tabLabels = {
 
 const normalizeImages = (item) => {
   if (Array.isArray(item?.images) && item.images.length > 0) {
-    return item.images;
+    return item.images.filter(Boolean);
   }
 
   if (typeof item?.images === "string") {
@@ -485,20 +489,37 @@ const normalizeImages = (item) => {
 
 
 const renderBoost = () => {
+ if (!listings || listings.length === 0) {
   return (
     <View style={styles.boostContainer}>
+      <Text>No listings to boost</Text>
+    </View>
+  );
+}
+
+return (
+  <View style={styles.boostContainer}>
       <Text style={styles.boostTitle}>Boost Your Listings</Text>
 
       {listings.map((item) => {
         const images = normalizeImages(item);
-        const img = images[0];
+       const img =
+  images?.[0] ||
+  item?.image ||
+  item?.coverImage ||
+  "https://via.placeholder.com/100";
 
         return (
           <View key={item._id} style={styles.boostCard}>
-            <Image
-              source={{ uri: img || "https://via.placeholder.com/100" }}
-              style={styles.boostImage}
-            />
+           <Image
+  source={{
+    uri:
+      typeof profileImage === "string" && profileImage.startsWith("http")
+        ? profileImage
+        : "https://via.placeholder.com/150",
+  }}
+  style={styles.avatar}
+/>
 
             <View style={{ flex: 1 }}>
               <Text numberOfLines={1} style={styles.boostItemTitle}>
@@ -529,7 +550,7 @@ const renderBoost = () => {
 
 const filteredListings =
   activeTab === "listings"
-    ? listings.filter((item) => item.status === "active")
+    ? listings.filter((item) => item.status !== "deleted")
     : [];
 
 return (
@@ -608,9 +629,9 @@ return (
 </View>
 
         {/* NAME */}
-        <Text style={[styles.name, { textAlign: "center" }]}>
-          {user.full_name}
-        </Text>
+       <Text style={[styles.name, { textAlign: "center" }]}>
+  {user?.full_name || "User"}
+</Text>
 {isOwner && (
   <TouchableOpacity
     onPress={() =>
@@ -753,7 +774,7 @@ const styles = StyleSheet.create({
   tabRow: {
   flexDirection: "row",
   justifyContent: "center",
-  width: "400%",
+  flexWrap: "wrap",
   marginTop: 30,
 },
 

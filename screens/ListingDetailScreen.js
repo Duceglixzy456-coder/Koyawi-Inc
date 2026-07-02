@@ -16,7 +16,7 @@ import {
 } from "react-native";
  
 import { Dimensions } from "react-native";
-
+import { apiFetch } from "../api/apiClient";
 import { useAuth } from "../Context/AuthContext";
 
 
@@ -106,10 +106,9 @@ useEffect(() => {
 
   const incrementView = async () => {
     try {
-      await fetch(
-        `http://192.168.1.194:8000/listings/${listing._id}/view`,
-        { method: "POST" }
-      );
+      await apiFetch(`/listings/${listing._id}/view`, {
+  method: "POST",
+});
     } catch (err) {
       console.log("VIEW ERROR:", err);
     }
@@ -122,16 +121,17 @@ useEffect(() => {
   try {
     if (!token || !listing?._id) return [];
 
-    const res = await fetch(
-      `http://192.168.1.194:8000/conversations/listing/${listing._id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const res = await apiFetch(`/conversations/listing/${listing._id}`);
 
-    const data = await res.json();
+    const text = await response.text();
+
+let data;
+try {
+  data = JSON.parse(text);
+} catch (e) {
+  console.log("RAW RESPONSE:", text);
+  return;
+}
     return Array.isArray(data) ? data : [];
   } catch (err) {
     console.log("FETCH CONVOS ERROR:", err);
@@ -169,19 +169,12 @@ const handleMarkAsSoldPress = async () => {
 
 const handleMarkAsSold = async (conversationId) => {
   try {
-    const res = await fetch(
-      `http://192.168.1.194:8000/listings/${listing._id}/mark-sold`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          conversation_id: conversationId,
-        }),
-      }
-    );
+    const res = await apiFetch(`/listings/${listing._id}/mark-sold`, {
+  method: "POST",
+  body: JSON.stringify({
+    conversation_id: conversationId,
+  }),
+});
 
     const data = await res.json();
 
@@ -214,18 +207,12 @@ const handleReportListing = async () => {
   try {
     if (!listing?._id || !token || !userId) return;
 
-    const res = await fetch(
-      `http://192.168.1.194:8000/listings/${listing._id}/report`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          reporter_id: userId,
-        }),
-      }
-    );
+    const res = await apiFetch(`/listings/${listing._id}/report`, {
+  method: "POST",
+  body: JSON.stringify({
+    reporter_id: userId,
+  }),
+});
 
     const data = await res.json();
 
@@ -242,7 +229,10 @@ const handleReportListing = async () => {
  const createConversation = async (prefilledMessage = "") => {
   try {
     if (!token || !listing?.owner_id || !userId) return;
-
+if (!listing?.owner_id || !listing?._id) {
+  Alert.alert("Error", "Missing listing data");
+  return;
+}
     const response = await fetch(
       "http://192.168.1.194:8000/conversations",
       {
@@ -258,13 +248,28 @@ const handleReportListing = async () => {
       }
     );
 
-    const data = await response.json();
+    const text = await response.text(); // 🔥 ALWAYS SAFE FIRST
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.log("NON-JSON RESPONSE:", text);
+      Alert.alert("Error", "Server returned invalid response");
+      return;
+    }
+
+    if (!response.ok) {
+      console.log("CONVO FAILED:", data);
+      return;
+    }
 
     const id = data?.conversation_id || data?._id || data?.id;
 
-    if (!id) return;
-
-    setConversationId(id); // 🔥 THIS IS WHAT WAS MISSING
+    if (!id) {
+      console.log("NO CONVERSATION ID:", data);
+      return;
+    }
 
     navigation.navigate("Chat", {
       conversationId: id,
@@ -277,7 +282,6 @@ const handleReportListing = async () => {
     console.log("CONVO ERROR:", err);
   }
 };
-
  const deleteListing = () => {
   Alert.alert(
     "Delete Listing?",
@@ -289,16 +293,9 @@ const handleReportListing = async () => {
         style: "destructive",
         onPress: async () => {
           try {
-            const res = await fetch(
-              `http://192.168.1.194:8000/listings/${listing._id}`,
-              {
-                method: "DELETE",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
-              }
-            );
-
+            const res = await apiFetch(`/listings/${listing._id}`, {
+  method: "DELETE",
+});
             // 🔥 SAFE RESPONSE HANDLING
             let data = null;
 
@@ -341,15 +338,9 @@ const showUndoToast = (listingId) => {
 
 const undoDelete = async (listingId) => {
   try {
-    const res = await fetch(
-      `http://192.168.1.194:8000/listings/${listingId}/undo`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const res = await apiFetch(`/listings/${listingId}/undo`, {
+  method: "POST",
+});
 
     if (res.ok) {
       setUndoVisible(false);

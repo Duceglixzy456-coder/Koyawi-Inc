@@ -1,21 +1,34 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, Image, TouchableOpacity } from "react-native";
-import { useAuth } from "../Context/AuthContext";
+import { apiFetch } from "../api/apiClient";
 
 export default function SoldListingsScreen({ navigation, route }) {
-  const { token } = useAuth();
   const userId = route.params?.userId;
 
   const [soldListings, setSoldListings] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchSold();
-  }, []);
+  }, [userId]);
 
+  // ---------------- FETCH SOLD ----------------
   const fetchSold = async () => {
     try {
-      const res = await fetch("http://192.168.1.194:8000/listings");
-      const data = await res.json();
+      setLoading(true);
+
+      const res = await apiFetch("/listings");
+
+      let data = [];
+      try {
+        data = await res.json();
+      } catch {
+        data = [];
+      }
+
+      if (!Array.isArray(data)) {
+        data = [];
+      }
 
       const filtered = data.filter(
         (item) =>
@@ -26,9 +39,12 @@ export default function SoldListingsScreen({ navigation, route }) {
       setSoldListings(filtered);
     } catch (err) {
       console.log("SOLD FETCH ERROR:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
+  // ---------------- RENDER ITEM ----------------
   const renderItem = ({ item }) => {
     const image =
       item.images?.[0] ||
@@ -39,11 +55,11 @@ export default function SoldListingsScreen({ navigation, route }) {
     return (
       <TouchableOpacity
         onPress={() =>
-  navigation.navigate("ListingDetailScreen", {
-    listing: item,
-    viewOnly: true
-  })
-}
+          navigation.navigate("ListingDetailScreen", {
+            listing: item,
+            viewOnly: true,
+          })
+        }
         style={{
           backgroundColor: "#fff",
           margin: 10,
@@ -69,12 +85,15 @@ export default function SoldListingsScreen({ navigation, route }) {
     );
   };
 
+  // ---------------- UI ----------------
   return (
     <View style={{ flex: 1, backgroundColor: "#F2F2F7" }}>
       <FlatList
         data={soldListings}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
+        refreshing={loading}
+        onRefresh={fetchSold}
         ListEmptyComponent={
           <Text style={{ textAlign: "center", marginTop: 50 }}>
             No sold items yet

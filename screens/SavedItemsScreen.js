@@ -6,32 +6,39 @@ import {
   Image,
   TouchableOpacity,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getTokenOrLogout } from "../utils/auth";
+
+import { useAuth } from "../Context/AuthContext";
+import { apiFetch } from "../api/apiClient";
+
 export default function SavedItemsScreen({ navigation }) {
   const [saved, setSaved] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchSaved = async () => {
-  try {
-    const token = await getTokenOrLogout(navigation);
-if (!token) return;
+    try {
+      setLoading(true);
 
-    const res = await fetch("http://192.168.1.194:8000/saved", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      const res = await apiFetch("/saved");
 
-    const data = await res.json();
+      if (!res.ok) {
+        const err = await res.text();
+        console.log("SAVED ERROR:", err);
+        setSaved([]);
+        return;
+      }
 
-    console.log("SAVED RAW:", data);
+      const data = await res.json();
 
-    setSaved([...data]); // FORCE re-render
-  } catch (err) {
-    console.log("SAVED ERROR:", err);
-    setSaved([]);
-  }
-};
+      console.log("SAVED RAW:", data);
+
+      setSaved(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.log("SAVED ERROR:", err);
+      setSaved([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchSaved();
@@ -39,7 +46,7 @@ if (!token) return;
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f2f3f5" }}>
-
+      
       {/* BACK BUTTON */}
       <TouchableOpacity
         onPress={() => navigation.goBack()}
@@ -47,14 +54,13 @@ if (!token) return;
           position: "absolute",
           top: 50,
           left: 15,
-          backgroundColor: "rgba(255,255,255,0.25)",
-          paddingVertical: 8,
-          paddingHorizontal: 12,
-          borderRadius: 14,
+          padding: 8,
+          backgroundColor: "#fff",
+          borderRadius: 12,
           zIndex: 10,
         }}
       >
-        <Text style={{ fontSize: 16, fontWeight: "600" }}>←</Text>
+        <Text style={{ fontSize: 16 }}>←</Text>
       </TouchableOpacity>
 
       {/* TITLE */}
@@ -63,12 +69,18 @@ if (!token) return;
           fontSize: 22,
           fontWeight: "bold",
           marginTop: 60,
-          marginBottom: 10,
           textAlign: "center",
         }}
       >
         Saved Items
       </Text>
+
+      {/* EMPTY STATE */}
+      {!loading && saved.length === 0 && (
+        <Text style={{ textAlign: "center", marginTop: 40, color: "#666" }}>
+          No saved items yet
+        </Text>
+      )}
 
       {/* LIST */}
       <FlatList
@@ -84,7 +96,7 @@ if (!token) return;
           <TouchableOpacity
             onPress={() =>
               navigation.navigate("ListingDetailScreen", {
-                listing: item,
+                listingId: item.listing_id,
               })
             }
             style={{
