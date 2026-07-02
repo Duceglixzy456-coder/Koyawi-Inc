@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Linking } from "react-native";
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 
 export default function BoostListingDetailScreen({ navigation, route }) {
   const { listing } = route.params || {};

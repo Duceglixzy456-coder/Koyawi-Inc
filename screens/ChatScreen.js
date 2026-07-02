@@ -25,7 +25,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
 import ChatSkeleton from "../components/Skeletons/ChatSkeleton";
 import { useAuth } from "../Context/AuthContext";
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 import { api } from "../utils/api";
 import { useSocket } from "../realtime/SocketContext";
 

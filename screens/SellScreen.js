@@ -13,7 +13,7 @@ import {
 
 import * as ImagePicker from "expo-image-picker";
 import { Colors } from "../theme/colors";
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 
 function SellScreen({ navigation }) {
   const [title, setTitle] = useState("");

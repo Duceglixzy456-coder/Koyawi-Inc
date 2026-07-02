@@ -9,7 +9,7 @@ import {
   Image,
 } from "react-native";
 import { useAuth } from "../Context/AuthContext";
-
+import { apiFetch } from "../api/apiFetch";
 export default function SelectBuyerScreen({ route, navigation }) {
   const { listingId } = route.params;
   const { token } = useAuth();
@@ -119,54 +119,83 @@ setConvos(Array.isArray(data) ? data : []);
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={{ fontSize: 18 }}>‹ Back</Text>
-        </TouchableOpacity>
+  <TouchableOpacity
+    onPress={() => navigation.goBack()}
+    style={{
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "#f2f2f2",
+    }}
+  >
+    <Text style={{ fontSize: 18 }}>←</Text>
+  </TouchableOpacity>
 
-        <Text style={styles.title}>Select Buyer</Text>
-      </View>
+  <Text style={styles.title}>Select Buyer</Text>
+</View>
 
-      <ScrollView contentContainerStyle={{ padding: 12 }}>
-        {convos.map((c) => (
-          <TouchableOpacity
-            key={c._id}
-            onPress={() => {
-              setSelected(c);
-              setConfirmVisible(true);
-            }}
-            style={[
-              styles.card,
-              selected?._id === c._id && styles.cardSelected,
-            ]}
-          >
-            <View style={styles.row}>
-              {c.buyer?.image ? (
-                <Image source={{ uri: c.buyer.image }} style={styles.avatarImage} />
-              ) : (
-                <View style={styles.avatar}>
-                  <Text style={{ color: "#fff", fontWeight: "700" }}>
-                    {getInitials(c.buyer?.name || c.buyer_id)}
-                  </Text>
-                </View>
-              )}
+    <ScrollView contentContainerStyle={{ padding: 12 }}>
+  {convos.map((c) => {
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.buyerText}>
-                  {c.buyer?.name || c.buyer_id || "Unknown Buyer"}
-                </Text>
+    const avatarUrl = c.buyer?.image || c.buyer?.profileImage;
 
-                <Text style={styles.message} numberOfLines={1}>
-                  {c.last_message || "No messages yet"}
-                </Text>
-              </View>
+    return (
+      <TouchableOpacity
+        key={c._id}
+        onPress={() => {
+          setSelected(c);
+          setConfirmVisible(true);
+        }}
+        style={[
+          styles.card,
+          selected?._id === c._id && styles.cardSelected,
+        ]}
+      >
+        <View style={styles.row}>
 
-              <Text style={styles.time}>
-                formatTime(c.updated_at || c.last_message_time)
+          {/* AVATAR */}
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={styles.avatarImage}
+            />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={{ color: "#fff", fontWeight: "700" }}>
+                {getInitials(c.buyer?.name || c.buyer_id)}
               </Text>
             </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+          )}
+
+          {/* TEXT CONTENT */}
+          <View style={{ flex: 1 }}>
+
+            <Text style={{ fontSize: 13, fontWeight: "700", marginBottom: 2 }}>
+              {c.listing?.title || "Loading item..."}
+            </Text>
+
+            <Text style={styles.buyerText}>
+              {c.buyer?.name || c.buyer_id || "Unknown Buyer"}
+            </Text>
+
+            <Text style={styles.message} numberOfLines={1}>
+              {c.last_message || "No messages yet"}
+            </Text>
+
+          </View>
+
+          {/* TIME */}
+          <Text style={styles.time}>
+            {formatTime(c.updated_at || c.last_message_time)}
+          </Text>
+
+        </View>
+      </TouchableOpacity>
+    );
+  })}
+</ScrollView>
 
       {confirmVisible && selected && (
         <View style={styles.sheet}>
@@ -203,15 +232,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f6f8" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  header: {
-    padding: 15,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderColor: "#eee",
-  },
-
+header: {
+  paddingTop: 55,   // 👈 pushes down from notch
+  paddingBottom: 15,
+  paddingHorizontal: 15,
+  flexDirection: "row",
+  alignItems: "center",
+  backgroundColor: "#fff",
+  borderBottomWidth: 1,
+  borderColor: "#eee",
+},
   title: { fontSize: 18, fontWeight: "700", marginLeft: 12 },
 
   card: {

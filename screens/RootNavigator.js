@@ -22,7 +22,7 @@ import CommunityGuidelinesScreen from "./CommunityGuidelinesScreen";
 import TermsPoliciesScreen from "./TermsPoliciesScreen";
 import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
 import SessionExpiredScreen from "./SessionExpiredScreen";
-
+import SellerProfileScreen from "../screens/SellerProfileScreen";
 const Stack = createNativeStackNavigator();
 
 function AuthStack() {
@@ -93,6 +93,11 @@ function AppStack() {
         name="SessionExpired"
         component={SessionExpiredScreen}
       />
+
+    <Stack.Screen
+  name="SellerProfileScreen"
+  component={SellerProfileScreen}
+/>
     </Stack.Navigator>
   );
 }

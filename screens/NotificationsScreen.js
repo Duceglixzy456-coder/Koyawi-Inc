@@ -12,7 +12,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import NotificationSkeleton from "../components/Skeletons/NotificationSkeleton";
 import { Colors } from "../theme/colors";
 import { useAuth } from "../Context/AuthContext";
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 
 export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);

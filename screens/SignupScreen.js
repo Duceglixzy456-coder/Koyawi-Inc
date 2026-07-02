@@ -8,7 +8,7 @@ import {
   Image,
 } from "react-native";
 
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 
 export default function SignupScreen({ navigation }) {
   const [phone, setPhone] = useState("");

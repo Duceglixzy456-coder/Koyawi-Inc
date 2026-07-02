@@ -16,7 +16,7 @@ import {
 } from "react-native";
  
 import { Dimensions } from "react-native";
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 import { useAuth } from "../Context/AuthContext";
 
 
@@ -123,22 +123,22 @@ useEffect(() => {
 
     const res = await apiFetch(`/conversations/listing/${listing._id}`);
 
-    const text = await response.text();
+    const text = await res.text(); // ✅ FIXED
 
-let data;
-try {
-  data = JSON.parse(text);
-} catch (e) {
-  console.log("RAW RESPONSE:", text);
-  return;
-}
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.log("RAW RESPONSE:", text);
+      return [];
+    }
+
     return Array.isArray(data) ? data : [];
   } catch (err) {
     console.log("FETCH CONVOS ERROR:", err);
     return [];
   }
 };
-
 const handleMarkAsSoldPress = async () => {
   try {
     const convos = await fetchListingConversations();
@@ -152,16 +152,14 @@ const handleMarkAsSoldPress = async () => {
       return handleMarkAsSold(convos[0]._id);
     }
 
-    Alert.alert(
-      "Select Buyer",
-      "Choose who bought this item",
-      convos.map((c) => ({
-        text: c.last_message
-          ? `“${c.last_message.slice(0, 25)}...”`
-          : "Buyer",
-        onPress: () => handleMarkAsSold(c._id),
-      }))
-    );
+   Alert.alert(
+  "Select Buyer",
+  "Choose who bought this item",
+  convos.map((c) => ({
+    text: `${c.buyer?.name || "Unknown"} - ${c.listing_title || "Listing"}\n“${c.last_message || ""}”`,
+    onPress: () => handleMarkAsSold(c._id),
+  }))
+);
   } catch (err) {
     console.log("MARK AS SOLD PRESS ERROR:", err);
   }
@@ -271,7 +269,7 @@ if (!listing?.owner_id || !listing?._id) {
       return;
     }
 
-    navigation.navigate("Chat", {
+    navigation.navigate("ChatScreen", {
       conversationId: id,
       listingId: listing._id,
       otherUserId: listing.owner_id,

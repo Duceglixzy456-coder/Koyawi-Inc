@@ -19,7 +19,7 @@ import { Alert } from "react-native";
 import { useAuth } from "../Context/AuthContext";
 import { useLanguage } from "../Context/LanguageContext";
 import { translations } from "../utils/translations";
-
+import { useFocusEffect } from "@react-navigation/native";
 export default function SellerProfileScreen({ navigation, route }) {
   const [user, setUser] = useState(null);
   const [editingBio, setEditingBio] = useState(false);
@@ -28,6 +28,8 @@ const [bioText, setBioText] = useState("");
   const [isFollowing, setIsFollowing] = useState(false);
   const [stats, setStats] = useState({ followers: 0, following: 0 });
   const [listings, setListings] = useState([]);
+  const [soldListings, setSoldListings] = useState([]);
+  
   const [activeTab, setActiveTab] = useState("listings");
   const profileImage = localProfileImage || user?.profileImage;
   const distance = "5 miles radius • Conakry";
@@ -41,6 +43,7 @@ const t = translations?.[language]?.sellerProfile ?? {};
 
 const decoded = token ? jwtDecode(token) : null;
 const currentUserId = decoded?.sub;
+
 
 const profileUserId = React.useMemo(() => {
   return (
@@ -443,9 +446,9 @@ const tabLabels = {
         <Text style={styles.infoLabel}>
           Sold Listings
         </Text>
-        <Text style={styles.infoValue}>
-          {soldListings}
-        </Text>
+       <Text style={styles.infoValue}>
+  {soldListings?.length || 0} items sold
+</Text>
       </View>
 
       {/* MEMBER SINCE */}

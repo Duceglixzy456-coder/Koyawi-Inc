@@ -9,7 +9,7 @@ import {
 } from "react-native";
 
 import ScreenHeader from "../components/ScreenHeader";
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 
 export default function EditListingScreen({ route, navigation }) {
   const { listing } = route.params;

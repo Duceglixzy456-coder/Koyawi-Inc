@@ -8,7 +8,7 @@ import {
   Image,
 } from "react-native";
 
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 import { jwtDecode } from "jwt-decode";
 import { Colors } from "../theme/colors";
 import { Ionicons } from "@expo/vector-icons";

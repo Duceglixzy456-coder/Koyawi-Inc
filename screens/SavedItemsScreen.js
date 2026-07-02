@@ -8,7 +8,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "../Context/AuthContext";
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 
 export default function SavedItemsScreen({ navigation }) {
   const [saved, setSaved] = useState([]);

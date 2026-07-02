@@ -9,9 +9,8 @@ import {
   Image,
   SafeAreaView,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_URL = "https://your-api-url.com"; // replace with real backend or ngrok
+import { apiFetch } from "../api/apiFetch";
 
 const FollowersScreen = ({ route, navigation }) => {
   const { userId } = route.params;
@@ -20,51 +19,35 @@ const FollowersScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState([]);
 
+  const safeText = (val, fallback) => {
+  if (!val) return fallback;
+  if (typeof val !== "string") return fallback;
+  if (val.trim().length === 0) return fallback;
+  return val;
+};
+
   const fetchData = useCallback(async () => {
+    if (!userId) return;
+
     setLoading(true);
 
     try {
-      const token = await AsyncStorage.getItem("token");
-
       const endpoint =
         tab === "followers"
-          ? `${API_URL}/followers/${userId}`
-          : `${API_URL}/following/${userId}`;
+          ? `/followers/${userId}`
+          : `/following/${userId}`;
 
-      const res = await fetch(endpoint, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const res = await apiFetch(endpoint);
 
-      console.log("STATUS:", res.status);
+      // supports both raw fetch OR wrapped apiFetch
+      const parsed =
+        typeof res?.json === "function"
+          ? await res.json()
+          : res;
 
-      const text = await res.text();
-      console.log("RAW RESPONSE:", text);
+      console.log("FOLLOW RESPONSE:", parsed);
 
-      let parsed = null;
-
-      try {
-        parsed = JSON.parse(text);
-      } catch (e) {
-        console.log("JSON PARSE FAILED");
-      }
-
-      let finalData = [];
-
-      if (Array.isArray(parsed)) {
-        finalData = parsed;
-      } else if (Array.isArray(parsed?.data)) {
-        finalData = parsed.data;
-      } else if (Array.isArray(parsed?.followers)) {
-        finalData = parsed.followers;
-      } else if (Array.isArray(parsed?.following)) {
-        finalData = parsed.following;
-      }
-
-      setData(finalData);
+      setData(Array.isArray(parsed) ? parsed : []);
     } catch (err) {
       console.log("FOLLOW ERROR:", err);
       setData([]);
@@ -77,38 +60,37 @@ const FollowersScreen = ({ route, navigation }) => {
     fetchData();
   }, [fetchData]);
 
-  const renderItem = ({ item }) => {
-    const user = item.user || item.follower || item.following || item;
+const renderItem = ({ item }) => {
+  const user = item;
 
-    return (
-      <TouchableOpacity
-        style={styles.userCard}
-        onPress={() =>
-          navigation.navigate("ProfileView", {
-            userId: user._id,
-          })
-        }
-      >
-        <Image
-          source={{
-            uri: user.profileImage || "https://via.placeholder.com/100",
-          }}
-          style={styles.avatar}
-        />
+  return (
+    <TouchableOpacity
+      style={styles.userCard}
+      onPress={() =>
+        navigation.navigate("SellerProfileScreen", {
+          userId: user._id,
+        })
+      }
+    >
+      <Image
+        source={{
+          uri: user.profileImage || "https://via.placeholder.com/100",
+        }}
+        style={styles.avatar}
+      />
 
-        <View style={{ flex: 1 }}>
-          <Text style={styles.name}>
-            {user.name || "Unknown User"}
-          </Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.name}>
+          {safeText(user.name, "Unknown User")}
+        </Text>
 
-          <Text style={styles.username}>
-            @{user.username || "user"}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
+        <Text style={styles.username}>
+          @{safeText(user.username, "user")}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
   return (
     <SafeAreaView style={styles.container}>
       {/* HEADER */}
@@ -119,10 +101,7 @@ const FollowersScreen = ({ route, navigation }) => {
       {/* TABS */}
       <View style={styles.tabRow}>
         <TouchableOpacity
-          style={[
-            styles.tab,
-            tab === "followers" && styles.activeTab,
-          ]}
+          style={[styles.tab, tab === "followers" && styles.activeTab]}
           onPress={() => setTab("followers")}
         >
           <Text
@@ -136,10 +115,7 @@ const FollowersScreen = ({ route, navigation }) => {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.tab,
-            tab === "following" && styles.activeTab,
-          ]}
+          style={[styles.tab, tab === "following" && styles.activeTab]}
           onPress={() => setTab("following")}
         >
           <Text
@@ -161,21 +137,16 @@ const FollowersScreen = ({ route, navigation }) => {
           style={{ marginTop: 30 }}
         />
       ) : (
-        <FlatList
+               <FlatList
           data={data}
-          keyExtractor={(item, index) =>
-            item._id?.toString() || index.toString()
-          }
+          keyExtractor={(item) => item._id + Math.random().toString()}
           renderItem={renderItem}
-          contentContainerStyle={{
-            paddingTop: 10,
-            paddingBottom: 40,
-          }}
-          ListEmptyComponent={
-            <Text style={styles.empty}>
-              No {tab} found
-            </Text>
-          }
+          contentContainerStyle={{ padding: 10 }}
+         ListEmptyComponent={() => (
+  <Text style={styles.empty}>
+    No {tab || "items"} found
+  </Text>
+)}
         />
       )}
     </SafeAreaView>
@@ -199,6 +170,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "700",
+    color: "#111",
   },
 
   tabRow: {

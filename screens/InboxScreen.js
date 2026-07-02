@@ -14,7 +14,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { useSocket } from "../realtime/SocketContext";
 import { useAuth } from "../Context/AuthContext";
-import { apiFetch } from "../api/apiClient";
+import { apiFetch } from "../api/apiFetch";
 
 export default function InboxScreen({ navigation }) {
   // ================= STATE =================
